@@ -1956,7 +1956,7 @@ Expected: 20 个 `✅` ALL TESTS PASSED + 构建成功
 
 ## 测试
 
-    cd CoreKit && swift test
+    cd CoreKit && swift run CoreKitTestRunner
 ```
 
 - [ ] **Step 3: 请用户手动验收**
@@ -1985,7 +1985,7 @@ git commit -m "docs: README 使用说明"
 
 ## 计划自审记录
 
-1. **规格覆盖**:规格第 4 节 12 个菜单项 ↔ Task 8(4 项)/ Task 9(7 项)/ Task 7(拷贝路径 1 项);设置窗 ↔ Task 6;构建 ↔ Task 7;模板 ↔ Task 5;彻底删除/批量重命名/乱码修复 ↔ Task 10-12;测试策略 ↔ Task 1-4(swift test)+ Task 13(手动清单)。无遗漏。
+1. **规格覆盖**:规格第 4 节 12 个菜单项 ↔ Task 8(4 项)/ Task 9(7 项)/ Task 7(拷贝路径 1 项);设置窗 ↔ Task 6;构建 ↔ Task 7;模板 ↔ Task 5;彻底删除/批量重命名/乱码修复 ↔ Task 10-12;测试策略 ↔ Task 1-4(轻量测试 runner)+ Task 13(手动清单)。无遗漏。
 2. **占位符扫描**:Task 6 的三个操作窗占位是刻意的中间态(该任务只求骨架可编译),Task 8-12 完整替换,不属计划缺陷。
 3. **类型一致性**:`ActionPayload(action:paths:)`、`FeatureStore.isEnabled(_:)`、`RenamePlanner.plan(names:rule:)`、`FileOps.moveWithoutClobber/makeWritable`、`PathUtils.uniqueName(in:base:ext:)`、`FileWalker.walk/totalSize` 在各任务间签名一致;action 名 `delete-forever`/`batch-rename`/`fix-mojibake` 扩展端与路由端一致。
 4. **对规格的一处修正(已说明)**:传参从 `OpenConfiguration.arguments` 改为 URL query(热启动可靠),见 Task 4 说明。
