@@ -17,20 +17,22 @@ swift --version          # 应 ≥ 5.9
 ```
 若无 CLT:`xcode-select --install`(用户手动装,弹出系统对话框)。
 
+> **⚠️ 修订(2026-11-09,执行 Task 1 时发现):** 纯 CLT **不带 XCTest 模块**(`swift test` 不可用,已实证)。经用户确认,单元测试改用**轻量测试执行器**:SPM `executableTarget` + 手写断言 harness,运行 `swift run CoreKitTestRunner`。Task 1-4 的测试代码已全部按此改写;Task 1 Step 5 的 `totalSize` 同时修复了"把目录 st_size 计入总和"的 bug。原 XCTest 版本废弃。
+
 ---
 
 ## Task 1: CoreKit 包骨架 + PathUtils + FileWalker(TDD)
 
 **Files:**
 - Create: `CoreKit/Package.swift`
+- Create: `CoreKit/.gitignore`
 - Create: `CoreKit/Sources/CoreKit/PathUtils.swift`
 - Create: `CoreKit/Sources/CoreKit/FileWalker.swift`
-- Test: `CoreKit/Tests/CoreKitTests/PathUtilsTests.swift`
-- Test: `CoreKit/Tests/CoreKitTests/FileWalkerTests.swift`
+- Test(可执行测试 runner): `CoreKit/Sources/CoreKitTestRunner/Harness.swift` `main.swift` `PathUtilsTests.swift` `FileWalkerTests.swift`
 
-- [ ] **Step 1: 写 SPM 包描述文件**
+- [ ] **Step 1: 写 SPM 包描述文件与 gitignore**
 
-`CoreKit/Package.swift`:
+`CoreKit/Package.swift`(注:纯 CLT 无 XCTest,测试用可执行 runner,见顶部修订说明):
 ```swift
 // swift-tools-version:5.9
 import PackageDescription
@@ -39,88 +41,144 @@ let package = Package(
     name: "CoreKit",
     targets: [
         .target(name: "CoreKit"),
-        .testTarget(name: "CoreKitTests", dependencies: ["CoreKit"])
+        .executableTarget(
+            name: "CoreKitTestRunner",
+            dependencies: ["CoreKit"]
+        ),
     ]
 )
 ```
 
-- [ ] **Step 2: 写 PathUtils 失败测试**
+`CoreKit/.gitignore`:
+```
+.build/
+```
 
-`CoreKit/Tests/CoreKitTests/PathUtilsTests.swift`:
+- [ ] **Step 2: 写断言 harness**
+
+`CoreKit/Sources/CoreKitTestRunner/Harness.swift`:
 ```swift
-import XCTest
+import Foundation
+
+var _failures = 0
+var _currentTest = ""
+
+func test(_ name: String, _ body: () throws -> Void) {
+    _currentTest = name
+    do {
+        try body()
+        print("✅ \(name)")
+    } catch {
+        print("❌ \(name): 抛错 \(error)")
+        _failures += 1
+    }
+}
+
+func expectEqual<T: Equatable>(_ actual: T, _ expected: T,
+                               file: StaticString = #file, line: UInt = #line) {
+    if actual != expected {
+        print("❌ \(_currentTest)(\(file):\(line)): 期望 \(expected),实际 \(actual)")
+        _failures += 1
+    }
+}
+
+func expectTrue(_ cond: Bool, _ label: String,
+                file: StaticString = #file, line: UInt = #line) {
+    if !cond {
+        print("❌ \(_currentTest)(\(file):\(line)): \(label)")
+        _failures += 1
+    }
+}
+
+func makeTempDir() throws -> URL {
+    let dir = FileManager.default.temporaryDirectory
+        .appendingPathComponent("ck-tests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    return dir
+}
+```
+
+`CoreKit/Sources/CoreKitTestRunner/main.swift`(后续 Task 2-4 各自追加一行 `runXxxTests()`):
+```swift
+runPathUtilsTests()
+runFileWalkerTests()
+
+if _failures > 0 {
+    print("FAILED:\(_failures) 个断言失败")
+    exit(1)
+}
+print("ALL TESTS PASSED")
+```
+
+- [ ] **Step 3: 写 PathUtils 失败测试**
+
+`CoreKit/Sources/CoreKitTestRunner/PathUtilsTests.swift`:
+```swift
+import Foundation
 import CoreKit
 
-final class PathUtilsTests: XCTestCase {
-    func testUniqueNameReturnsBaseWhenFree() throws {
+func runPathUtilsTests() {
+    test("PathUtils:空闲时返回 base") {
         let dir = try makeTempDir()
-        XCTAssertEqual(PathUtils.uniqueName(in: dir, base: "未命名文件夹", ext: ""), "未命名文件夹")
-        XCTAssertEqual(PathUtils.uniqueName(in: dir, base: "未命名文件", ext: "txt"), "未命名文件.txt")
+        expectEqual(PathUtils.uniqueName(in: dir, base: "未命名文件夹", ext: ""), "未命名文件夹")
+        expectEqual(PathUtils.uniqueName(in: dir, base: "未命名文件", ext: "txt"), "未命名文件.txt")
     }
-    func testUniqueNameSkipsExistingWithSpaceNumber() throws {
+    test("PathUtils:已存在则加空格编号") {
         let dir = try makeTempDir()
         FileManager.default.createFile(atPath: dir.appendingPathComponent("新建文本文档.txt").path, contents: Data())
-        XCTAssertEqual(PathUtils.uniqueName(in: dir, base: "新建文本文档", ext: "txt"), "新建文本文档 2.txt")
+        expectEqual(PathUtils.uniqueName(in: dir, base: "新建文本文档", ext: "txt"), "新建文本文档 2.txt")
     }
-    func testUniqueNameIncrementsPastConsecutiveExisting() throws {
+    test("PathUtils:连续已存在时继续递增") {
         let dir = try makeTempDir()
         for i in [1, 2] {
             let name = i == 1 ? "草稿" : "草稿 2"
             FileManager.default.createFile(atPath: dir.appendingPathComponent(name).path, contents: Data())
         }
-        XCTAssertEqual(PathUtils.uniqueName(in: dir, base: "草稿", ext: ""), "草稿 3")
-    }
-    private func makeTempDir() throws -> URL {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("ck-tests-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        return dir
+        expectEqual(PathUtils.uniqueName(in: dir, base: "草稿", ext: ""), "草稿 3")
     }
 }
 ```
 
-- [ ] **Step 3: 写 FileWalker 失败测试**
+- [ ] **Step 4: 写 FileWalker 失败测试**
 
-`CoreKit/Tests/CoreKitTests/FileWalkerTests.swift`:
+`CoreKit/Sources/CoreKitTestRunner/FileWalkerTests.swift`:
 ```swift
-import XCTest
+import Foundation
 import CoreKit
 
-final class FileWalkerTests: XCTestCase {
-    func testWalkVisitsNestedFiles() throws {
-        let (root, files) = try makeTree()
+func runFileWalkerTests() {
+    test("FileWalker:遍历嵌套文件") {
+        let (root, _) = try makeTree()
         var visited = Set<String>()
         FileWalker.walk(root) { visited.insert($0.lastPathComponent).inserted }
-        XCTAssertEqual(visited, Set(["root", "a.txt", "sub", "b.txt"]))
-        _ = files
+        expectEqual(visited, Set(["root", "a.txt", "sub", "b.txt"]))
     }
-    func testTotalSizeSumsRecursiveBytes() throws {
+    test("FileWalker:总大小只统计文件字节(不含目录元数据)") {
         let (root, _) = try makeTree()
-        let size = FileWalker.totalSize(of: [root])
-        XCTAssertEqual(size, 9) // a.txt 5 字节 + b.txt 4 字节
+        expectEqual(FileWalker.totalSize(of: [root]), Int64(9)) // a.txt 5B + b.txt 4B
     }
-    /// root/
-    ///   a.txt(5B)  sub/b.txt(4B)
-    private func makeTree() throws -> (URL, [URL]) {
-        let root = FileManager.default.temporaryDirectory
-            .appendingPathComponent("walk-\(UUID().uuidString)")
-        let sub = root.appendingPathComponent("sub")
-        try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
-        let a = root.appendingPathComponent("a.txt")
-        let b = sub.appendingPathComponent("b.txt")
-        try Data("hello".utf8).write(to: a)
-        try Data("abcd".utf8).write(to: b)
-        return (root, [a, b])
-    }
+}
+
+/// root/  a.txt(5B)  sub/b.txt(4B)
+private func makeTree() throws -> (URL, [URL]) {
+    let root = FileManager.default.temporaryDirectory
+        .appendingPathComponent("walk-\(UUID().uuidString)")
+    let sub = root.appendingPathComponent("sub")
+    try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
+    let a = root.appendingPathComponent("a.txt")
+    let b = sub.appendingPathComponent("b.txt")
+    try Data("hello".utf8).write(to: a)
+    try Data("abcd".utf8).write(to: b)
+    return (root, [a, b])
 }
 ```
 
-- [ ] **Step 4: 跑测试确认失败**
+- [ ] **Step 5: 跑测试确认失败**
 
-Run: `cd CoreKit && swift test 2>&1 | tail -5`
-Expected: FAIL(`cannot find 'PathUtils' in scope` 等)
+Run: `cd CoreKit && swift run CoreKitTestRunner 2>&1 | tail -5`
+Expected: 编译失败(`cannot find 'PathUtils' in scope` 等)
 
-- [ ] **Step 5: 最小实现**
+- [ ] **Step 6: 最小实现**
 
 `CoreKit/Sources/CoreKit/PathUtils.swift`:
 ```swift
@@ -151,19 +209,21 @@ public enum FileWalker {
     /// 深度优先遍历,对每个节点(含根)调用 visit;visit 返回 false 时不进入子目录
     public static func walk(_ root: URL, visit: (URL) -> Bool) {
         guard visit(root) else { return }
-        guard (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey])) != nil else { return }
-        let children = (try? FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: root, includingPropertiesForKeys: [.isDirectoryKey])) ?? []
         for child in children {
             let isDir = (try? child.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
             if isDir { walk(child, visit: visit) } else { _ = visit(child) }
         }
     }
 
+    /// 递归求和;只统计文件字节,目录自身的 st_size(APFS 上 96B 级别的元数据)不计入
     public static func totalSize(of urls: [URL]) -> Int64 {
         var total: Int64 = 0
         for url in urls {
             walk(url) { f in
-                if let s = try? FileManager.default.attributesOfItem(atPath: f.path)[.size] as? Int64 {
+                let isDir = (try? f.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory ?? false
+                if !isDir, let s = try? FileManager.default.attributesOfItem(atPath: f.path)[.size] as? Int64 {
                     total += s
                 }
                 return true
@@ -174,16 +234,16 @@ public enum FileWalker {
 }
 ```
 
-- [ ] **Step 6: 跑测试确认通过**
+- [ ] **Step 7: 跑测试确认通过**
 
-Run: `cd CoreKit && swift test`
-Expected: `Executed 5 tests, with 0 failures`
+Run: `cd CoreKit && swift run CoreKitTestRunner`
+Expected: 5 个 `✅`,末尾 `ALL TESTS PASSED`,退出码 0
 
-- [ ] **Step 7: 提交**
+- [ ] **Step 8: 提交**
 
 ```bash
 git add CoreKit
-git commit -m "feat(core): PathUtils 唯一命名与 FileWalker 递归遍历"
+git commit -m "feat(core): PathUtils 唯一命名与 FileWalker 递归遍历(含轻量测试 runner)"
 ```
 
 ---
@@ -192,43 +252,52 @@ git commit -m "feat(core): PathUtils 唯一命名与 FileWalker 递归遍历"
 
 **Files:**
 - Create: `CoreKit/Sources/CoreKit/MojibakeFixer.swift`
-- Test: `CoreKit/Tests/CoreKitTests/MojibakeFixerTests.swift`
+- Test: `CoreKit/Sources/CoreKitTestRunner/MojibakeTests.swift`(并在 runner 的 `main.swift` 追加 `runMojibakeTests()`)
 
 原理:磁盘乱码名 = 原始字节被按「中间编码」(Latin-1/CP1252/MacRoman)误读成字符串后又存为 UTF-8。修复 = 用中间编码还原原始字节 → 按目标编码(UTF-8/GB18030/Big5)解码 → 结果含 CJK 即候选。
 
 - [ ] **Step 1: 写失败测试**
 
-`CoreKit/Tests/CoreKitTests/MojibakeFixerTests.swift`:
+`CoreKit/Sources/CoreKitTestRunner/MojibakeTests.swift`:
 ```swift
-import XCTest
+import Foundation
 import CoreKit
 
-final class MojibakeFixerTests: XCTestCase {
+func runMojibakeTests() {
     // "中文" UTF-8 字节(E4 B8 AD E6 96 87)被按 Latin-1 误读后的乱码名
-    private let utf8Mojibake = "\u{E4}\u{B8}\u{AD}\u{E6}\u{96}\u{87}"
+    let utf8Mojibake = "\u{E4}\u{B8}\u{AD}\u{E6}\u{96}\u{87}"
     // "中文" GBK 字节(D6 D0 CE C4)被按 Latin-1 误读后的乱码名
-    private let gbkMojibake = "\u{D6}\u{D0}\u{CE}\u{C4}"
+    let gbkMojibake = "\u{D6}\u{D0}\u{CE}\u{C4}"
 
-    func testFixesUtf8BytesMisdemeanedAsLatin1() {
-        XCTAssertEqual(MojibakeFixer.candidates(for: utf8Mojibake).first, "中文")
+    test("乱码修复:UTF-8 字节被 Latin-1 误读 → 还原中文") {
+        expectEqual(MojibakeFixer.candidates(for: utf8Mojibake).first ?? "", "中文")
     }
-    func testFixesGbkBytesMisdemeanedAsLatin1() {
-        XCTAssertTrue(MojibakeFixer.candidates(for: gbkMojibake).contains("中文"))
+    test("乱码修复:GBK 字节被 Latin-1 误读 → 候选含中文") {
+        expectTrue(MojibakeFixer.candidates(for: gbkMojibake).contains("中文"), "候选应含 中文")
     }
-    func testNormalNameHasNoCandidates() {
-        XCTAssertTrue(MojibakeFixer.candidates(for: "报告.txt").isEmpty)
-        XCTAssertTrue(MojibakeFixer.candidates(for: "plain.txt").isEmpty)
+    test("乱码修复:正常中文名无候选") {
+        expectTrue(MojibakeFixer.candidates(for: "报告.txt").isEmpty, "报告.txt 不应有候选")
     }
-    func testReplacementCharIsUnfixable() {
-        XCTAssertTrue(MojibakeFixer.candidates(for: "re\u{FFFD}placed.txt").isEmpty)
+    test("乱码修复:纯 ASCII 名无候选") {
+        expectTrue(MojibakeFixer.candidates(for: "plain.txt").isEmpty, "plain.txt 不应有候选")
+    }
+    test("乱码修复:含 U+FFFD 判为不可修复") {
+        expectTrue(MojibakeFixer.candidates(for: "re\u{FFFD}placed.txt").isEmpty, "含替换字符应返回空")
     }
 }
 ```
 
+同时把 `CoreKit/Sources/CoreKitTestRunner/main.swift` 的顶部调用区改为:
+```swift
+runPathUtilsTests()
+runFileWalkerTests()
+runMojibakeTests()
+```
+
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `cd CoreKit && swift test 2>&1 | tail -3`
-Expected: FAIL(`cannot find 'MojibakeFixer' in scope`)
+Run: `cd CoreKit && swift run CoreKitTestRunner 2>&1 | tail -3`
+Expected: 编译失败(`cannot find 'MojibakeFixer' in scope`)
 
 - [ ] **Step 3: 实现**
 
@@ -271,8 +340,8 @@ public enum MojibakeFixer {
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `cd CoreKit && swift test`
-Expected: `Executed 9 tests, with 0 failures`(累计)
+Run: `cd CoreKit && swift run CoreKitTestRunner`
+Expected: 累计 10 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -287,50 +356,52 @@ git commit -m "feat(core): 乱码文件名检测与修复算法"
 
 **Files:**
 - Create: `CoreKit/Sources/CoreKit/RenameRules.swift`
-- Test: `CoreKit/Tests/CoreKitTests/RenameRulesTests.swift`
+- Test: `CoreKit/Sources/CoreKitTestRunner/RenameRulesTests.swift`(并在 runner 的 `main.swift` 追加 `runRenameTests()`)
 
 - [ ] **Step 1: 写失败测试**
 
-`CoreKit/Tests/CoreKitTests/RenameRulesTests.swift`:
+`CoreKit/Sources/CoreKitTestRunner/RenameRulesTests.swift`:
 ```swift
-import XCTest
+import Foundation
 import CoreKit
 
-final class RenameRulesTests: XCTestCase {
-    func testPrefixGoesBeforeStemKeepsExtension() {
+func runRenameTests() {
+    test("重命名:前缀加在主名前,保留扩展名") {
         let r = RenamePlanner.plan(names: ["a.txt"], rule: .prefix("项目_"))
-        XCTAssertEqual(r[0].new, "项目_a.txt")
+        expectEqual(r[0].new, "项目_a.txt")
     }
-    func testSuffixGoesBeforeExtension() {
+    test("重命名:后缀加在扩展名前") {
         let r = RenamePlanner.plan(names: ["a.txt"], rule: .suffix("_备份"))
-        XCTAssertEqual(r[0].new, "a_备份.txt")
+        expectEqual(r[0].new, "a_备份.txt")
     }
-    func testSequenceNumbersStemKeepsExtension() {
+    test("重命名:序号替换主名,保留扩展名") {
         let r = RenamePlanner.plan(names: ["a.txt", "b.txt"],
                                    rule: .sequence(base: "照片", start: 1, width: 3))
-        XCTAssertEqual(r[0].new, "照片001.txt")
-        XCTAssertEqual(r[1].new, "照片002.txt")
+        expectEqual(r[0].new, "照片001.txt")
+        expectEqual(r[1].new, "照片002.txt")
     }
-    func testReplaceWorksOnWholeName() {
+    test("重命名:查找替换作用于全名") {
         let r = RenamePlanner.plan(names: ["IMG_1.jpg", "IMG_2.jpg"],
                                    rule: .replace(find: "IMG", replacement: "照片"))
-        XCTAssertEqual(r.map { $0.new }, ["照片_1.jpg", "照片_2.jpg"])
+        expectEqual(r.map { $0.new }, ["照片_1.jpg", "照片_2.jpg"])
     }
-    func testNoExtensionEdgeCase() {
+    test("重命名:无扩展名边界") {
         let r = RenamePlanner.plan(names: ["README"], rule: .prefix("v2_"))
-        XCTAssertEqual(r[0].new, "v2_README")
+        expectEqual(r[0].new, "v2_README")
     }
-    func testCollisionsDetectDuplicateNews() {
+    test("冲突检测:发现重复新名") {
         let pairs: [(old: String, new: String)] = [("a", "x"), ("b", "x")]
-        XCTAssertEqual(RenamePlanner.collisions(in: pairs), ["x"])
+        expectEqual(RenamePlanner.collisions(in: pairs), ["x"])
     }
 }
 ```
 
+同时把 runner `main.swift` 调用区追加 `runRenameTests()`。
+
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `cd CoreKit && swift test 2>&1 | tail -3`
-Expected: FAIL(`cannot find 'RenamePlanner' in scope`)
+Run: `cd CoreKit && swift run CoreKitTestRunner 2>&1 | tail -3`
+Expected: 编译失败(`cannot find 'RenamePlanner' in scope`)
 
 - [ ] **Step 3: 实现**
 
@@ -375,8 +446,8 @@ public enum RenamePlanner {
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `cd CoreKit && swift test`
-Expected: `Executed 15 tests, with 0 failures`(累计)
+Run: `cd CoreKit && swift run CoreKitTestRunner`
+Expected: 累计 16 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -393,56 +464,56 @@ git commit -m "feat(core): 批量重命名规则与冲突检测"
 - Create: `CoreKit/Sources/CoreKit/ActionPayload.swift`
 - Create: `CoreKit/Sources/CoreKit/FeatureStore.swift`
 - Create: `CoreKit/Sources/CoreKit/FileOps.swift`
-- Test: `CoreKit/Tests/CoreKitTests/ActionPayloadTests.swift`
-- Test: `CoreKit/Tests/CoreKitTests/FileOpsTests.swift`
+- Test: `CoreKit/Sources/CoreKitTestRunner/ActionPayloadTests.swift` `FileOpsTests.swift`(并在 runner 的 `main.swift` 追加 `runActionPayloadTests()` 与 `runFileOpsTests()`)
 
 说明:规格定的 `OpenConfiguration.arguments` 在主 App **已运行时会被忽略**,故传参改为 URL query(`rightclickkit://<action>?p=<JSON 百分号编码>`),冷启动/热启动都可靠,仍不落盘。
 
 - [ ] **Step 1: 写失败测试**
 
-`CoreKit/Tests/CoreKitTests/ActionPayloadTests.swift`:
+`CoreKit/Sources/CoreKitTestRunner/ActionPayloadTests.swift`:
 ```swift
-import XCTest
+import Foundation
 import CoreKit
 
-final class ActionPayloadTests: XCTestCase {
-    func testRoundTripPreservesActionAndPaths() throws {
+func runActionPayloadTests() {
+    test("ActionPayload:URL 往返保留 action 与路径") {
         let p = ActionPayload(action: "batch-rename",
                               paths: ["/tmp/中 文/a.txt", "/tmp/b(1).txt"])
-        let url = try XCTUnwrap(p.makeURL())
-        XCTAssertEqual(url.scheme, "rightclickkit")
-        let back = try XCTUnwrap(ActionPayload.parse(url))
-        XCTAssertEqual(back, p)
+        let url = p.makeURL()
+        expectTrue(url != nil, "makeURL 不应返回 nil")
+        guard let url else { return }
+        expectEqual(url.scheme, "rightclickkit")
+        let back = ActionPayload.parse(url)
+        expectTrue(back != nil, "parse 不应返回 nil")
+        guard let back else { return }
+        expectEqual(back, p)
     }
-    func testParseRejectsForeignURL() {
-        XCTAssertNil(ActionPayload.parse(URL(string: "https://example.com/p=1")!))
+    test("ActionPayload:拒绝外来 URL") {
+        expectTrue(ActionPayload.parse(URL(string: "https://example.com/p=1")!) == nil,
+                   "https URL 不应被解析")
     }
 }
 ```
 
-`CoreKit/Tests/CoreKitTests/FileOpsTests.swift`:
+`CoreKit/Sources/CoreKitTestRunner/FileOpsTests.swift`:
 ```swift
-import XCTest
+import Foundation
 import CoreKit
 
-final class FileOpsTests: XCTestCase {
-    func testUniqueMoveResolvesConflict() throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("fo-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+func runFileOpsTests() {
+    test("FileOps:移动冲突时自动改名为 x 2.ext") {
+        let dir = try makeTempDir()
         let a = dir.appendingPathComponent("x.txt")
         try Data("1".utf8).write(to: a)
         let dst = dir.appendingPathComponent("x.txt")
         try Data("2".utf8).write(to: dst)
         let final = try FileOps.moveWithoutClobber(from: a, to: dst)
-        XCTAssertEqual(final.lastPathComponent, "x 2.txt")
-        XCTAssertEqual(try String(contentsOf: final, encoding: .utf8), "1")
-        XCTAssertEqual(try String(contentsOf: dst, encoding: .utf8), "2")
+        expectEqual(final.lastPathComponent, "x 2.txt")
+        expectEqual(try String(contentsOf: final, encoding: .utf8), "1")
+        expectEqual(try String(contentsOf: dst, encoding: .utf8), "2")
     }
-    func testMakeWritableClearsImmutableAndAddsUWrite() throws {
-        let dir = FileManager.default.temporaryDirectory
-            .appendingPathComponent("fo2-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    test("FileOps:授权限解除锁定并加 u+w") {
+        let dir = try makeTempDir()
         let f = dir.appendingPathComponent("y.txt")
         try Data("y".utf8).write(to: f)
         let fm = FileManager.default
@@ -450,16 +521,26 @@ final class FileOpsTests: XCTestCase {
         FileOps.makeWritable(f)
         let attrs = fm.attributesOfItem(atPath: f.path)
         let perms = (attrs[.posixPermissions] as? NSNumber)?.int16Value ?? 0
-        XCTAssertEqual(perms & 0o200, 0o200)
-        XCTAssertEqual(attrs[.immutable] as? Bool, false)
+        expectEqual(perms & 0o200, Int16(0o200))
+        expectEqual(attrs[.immutable] as? Bool, false)
     }
 }
 ```
 
+同时把 runner `main.swift` 调用区改为(累计):
+```swift
+runPathUtilsTests()
+runFileWalkerTests()
+runMojibakeTests()
+runRenameTests()
+runActionPayloadTests()
+runFileOpsTests()
+```
+
 - [ ] **Step 2: 跑测试确认失败**
 
-Run: `cd CoreKit && swift test 2>&1 | tail -3`
-Expected: FAIL(`cannot find 'ActionPayload'/'FileOps' in scope`)
+Run: `cd CoreKit && swift run CoreKitTestRunner 2>&1 | tail -3`
+Expected: 编译失败(`cannot find 'ActionPayload'/'FileOps' in scope`)
 
 - [ ] **Step 3: 实现**
 
@@ -590,8 +671,8 @@ public enum FileOps {
 
 - [ ] **Step 4: 跑测试确认通过**
 
-Run: `cd CoreKit && swift test`
-Expected: `Executed 18 tests, with 0 failures`(累计)
+Run: `cd CoreKit && swift run CoreKitTestRunner`
+Expected: 累计 20 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -1845,8 +1926,8 @@ git commit -m "feat(app): 乱码修复窗(候选预览+逐项可改)"
 
 - [ ] **Step 1: 全量跑一遍测试与构建**
 
-Run: `cd CoreKit && swift test && cd .. && ./build.sh`
-Expected: 全部测试通过 + 构建成功
+Run: `cd CoreKit && swift run CoreKitTestRunner && cd .. && ./build.sh`
+Expected: 20 个 `✅` ALL TESTS PASSED + 构建成功
 
 - [ ] **Step 2: 写 README(使用说明)**
 
