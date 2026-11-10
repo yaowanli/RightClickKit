@@ -38,6 +38,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 10(2026-11-10,Task 9 规格评审判「With fixes」,两处):** ① **Important·grantWrite 计数口径错位**:`FileOps.makeWritable` 经 FileWalker 遍历根节点+全部后代,返回**节点数**(文件夹含 3 文件全成功返回 4);原实现直接累加节点数与 `tried = urls.count`(顶层条目数)比较,选中文件夹授权时全成功也会误报「部分失败 4/1 项」。修法(裁决取 URL 粒度,CoreKit 保持冻结、不加节点/条目双口径元组——过度设计):`for url in urls where FileOps.makeWritable(url) > 0 { ok += 1 }`,顶层条目粒度计数,makeWritable 返回 >0 视为该条目成功;Task 9 grantWrite 代码块同步。② **Minor·compress7z 注释与实现不自洽**:原注释称相对路径「规避 7z 对含空格/特殊字符绝对路径的解析问题」,但 `out.path` 仍是绝对路径,且 Process 直传 argv 无 shell 切分问题;注释改写为如实描述(Process argv 直传说明 + 多选跨目录时相对 cwd 仅对首项目录有效的已知限制,Task 13 验收按同目录口径),Task 9 compress7z 代码块同步。
 >
 > **修订 11(2026-11-10,Task 9 质量评审通过,四条一行级打磨):** ① notify 换行族转义:`.components(separatedBy: .newlines).joined(separator: " ")` 替代单 `\n` 替换(补裸 CR 漏洞,覆盖 \r、\r\n、\n 及 Unicode 行分隔符);② ActionWindow.show doc 注释补「同 title 复用时忽略 width/height,尺寸以首次创建为准」(title 即去重键,Task 10-12 作者最易踩);③ locate7z 探测表补 p7zip 主二进制名 `7z`(Homebrew 与 /usr/local 各一,原表只有 7zz/7za 兼容入口);④ cutFiles 删冗余 `clearContents()`(declareTypes 自带 clear 语义;copyPath/copyName 走 setString 不带 clear,保留)。Task 6/8/9 代码块同步。
+>
+> **修订 12(2026-11-10,Task 10 执行中):** ① 唯一代码级打磨(计划原稿一行):`Task.detached` 内 `firstError` 在进 `MainActor.run` 前先落为 `let reported`,消除「并发执行代码中引用捕获 var」编译警告(Swift 6 模式下为错误);语义不变(逐项 removeItem,部分失败只报首个错误)。Task 10 代码块同步。② **窗口尺寸双口径实证**(临时 stderr 埋点 + CGWindowList,埋点测毕移除未入库):窗口 frame 自创建起恒为 **440x292** = 内容 440x260 + 标题栏实高 **32**(macOS 26 实测,前序「≈440x288 = 260+28」预估据此修正);contentView 精确 {440, 260},无留白/裁切(修订 9⑥ sizingOptions=[] 修复在新尺寸上复验,0.3s/1s/2s 三点采样无漂移)。CGWindowList 读得 432x286 系 **Liquid Glass 玻璃内缩的可视区口径**(水平 -8 / 垂直 -6),与 App 侧 frame 一致,非窗口被压。③ **同 title 复用路径实测**:换 payload(单文件→文件+目录两项)重复唤起,`show(created)` 仍仅 1 次、屏幕单窗、内容已换新——ActionWindow 去重键行为符合修订 9⑥/11② 定调;冷启动直达再复验(Task 9⑦ 先例)。④ ⚠️ UI 点击流(Toggle 勾选前「彻底删除」按钮禁用、勾选解禁、实测删除 a.txt)因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13;测试文件 `/tmp/rc-test/a.txt` 已就位保留。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
 
 ---
 
@@ -1808,6 +1810,8 @@ git commit -m "feat(ext): 剪切/压缩zip/7z/授权限/唤起主 App 三动作"
 
 ## Task 10: 主 App · 彻底删除窗(双确认)
 
+> 本节执行说明(2026-11-10):完整实现按下方代码块落地(唯一打磨:`firstError` 落 let 再进 `MainActor.run`,见顶部修订 12①)。Step 2 冒烟:**冷启动直达**(Task 9⑦ 先例复验),窗(标题「彻底删除」)正常弹出;新建/复用两路径均实测(复用换 payload 后仍单窗、内容换新);窗口 frame 实证 440x292(内容 440x260 + 标题栏 32),CGWindowList 432x286 为 Liquid Glass 可视区内缩口径,双口径一致无压窗(修订 12②)。⚠️ 勾选确认→按钮解禁→实际删除的点击流因 CLI agent 无辅助功能权限不可自动化,标**待用户验收**(Task 13);测试文件 `/tmp/rc-test/a.txt` 已保留待验。CoreKit 零改动,34 测试全绿。
+
 **Files:**
 - Modify: `App/DeleteForeverView.swift`(替换占位)
 
@@ -1877,9 +1881,10 @@ struct DeleteForeverView: View {
                 do { try FileManager.default.removeItem(at: t) }
                 catch { firstError = firstError ?? error.localizedDescription }
             }
+            let reported = firstError // 落为 let 再进 MainActor.run,消除并发捕获 var 警告(Swift 6 将为错误)
             await MainActor.run {
                 working = false
-                if let e = firstError { error = e } else { done = true }
+                if let e = reported { error = e } else { done = true }
             }
         }
     }
@@ -1891,6 +1896,7 @@ struct DeleteForeverView: View {
 
 Run: `./build.sh && open "rightclickkit://delete-forever?p=%5B%22%2Ftmp%2Frc-test%2Fa.txt%22%5D"`
 Expected: 窗口弹出;「彻底删除」按钮在勾选确认前禁用;创建 `mkdir -p /tmp/rc-test && echo hi > /tmp/rc-test/a.txt` 后实测删除成功
+执行结果(2026-11-10):构建退出码 0;窗口弹出、标题「彻底删除」、frame 440x292(内容+标题栏 32;CGWindowList 432x286 为玻璃内缩口径,修订 12②);冷启动与同 title 复用两路径实测通过。按钮禁用/勾选确认/实际删除为 UI 点击流,无辅助功能权限不可自动化,标**待用户验收**(Task 13 清单覆盖),`/tmp/rc-test/a.txt` 保留待验。
 
 - [ ] **Step 3: 提交**
 
