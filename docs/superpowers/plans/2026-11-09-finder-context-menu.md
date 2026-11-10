@@ -36,6 +36,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 9(2026-11-10,Task 9 执行中,含 Task 8 评审确认的五项顺手改进 A-E):** ① **add(to:) 复用 Feature.title**(A,消除 11 处菜单标题双写):签名去掉 title 参数、内部取 `feature.title`;Task 7/8/9 全部菜单代码块同步。执行前逐项核对 Feature.title 与原菜单字面量:**11 处完全一致,无裁决偏差**;新建文件子菜单 5 个模板项(TXT 文本等)无 Feature 对应,保持字面量。② **image(_:) 图标辅助**(B):systemSymbolName + 16pt 定尺寸收敛为私有辅助,add(to:) 与子菜单循环(父项/循环/add 三处)改用。③ **notify() 转义链补换行**(C):尾接 `.replacingOccurrences(of: "\n", with: " ")`(AppleScript 字面量不允许裸换行,error 消息可能携带);仍 fire-and-forget 不改 wait 语义。④ **runTool(executable:arguments:cwd:) 辅助**(D):compressZip/compress7z 的 Process→run→waitUntilExit→退出码检查收敛为共用私有辅助(启动失败返回 nil,调用方各自 notify;notify 不并入,保持 fire-and-forget 不阻塞主线程);baseName 辅助同时供两处压缩取输出基名。⑤ **path(percentEncoded: false) 延续**(E,Task 8 定调模式):cutFiles 剪贴板路径数组、openInApp 的 ActionPayload paths、compressZip 的 ditto 参数均改用显式解码;7z 因 cwd+相对路径模式保持 `$0.lastPathComponent` 不变。⑥ **fix(app) ActionWindow 窗口被压小**(Task 9 冒烟新发现,超出 A-E 范围单列一笔 commit):实测 macOS 26 的 NSHostingView 默认按 SwiftUI 理想尺寸驱动窗口——ActionWindow 创建 420x200 动作窗后,runloop 布局阶段窗口被压成内容固有大小 71x48(临时 stderr 埋点 + CGWindowList 双重实证,CLI 进程不可复现,须真实 App 事件循环);修复:新建 `makeHost` 辅助统一设 `sizingOptions = []`,新建与复用(重复唤起替换 contentView)两条路径都走,实测窗口稳定保持 420x200+标题栏,Task 6 代码块同步。⑦ **Step 4 冒烟实证**:`open "rightclickkit://batch-rename?p=…"` **冷启动直达**——LaunchServices 依据 App-Info.plist 的 CFBundleURLTypes 直接拉起主 App 并送达 URL,无需先手动启动注册 scheme;占位窗(标题「批量重命名」、内容「待实现」)正常弹出,新建与复用两路径均验证,测毕 pkill 清场。另录得非致命噪音:主 App 进程内 UserDefaults(suiteName:) 因 suite 等于自身 bundle id 打 warning("will not work"),FeatureStore 回退 UserDefaults.standard 后落盘同一 plist(com.yaowl.RightClickKit.plist),扩展按 suite 读同一文件,**开关仍互通**,暂不处理。cutFiles 剪贴板与全部 Finder UI 行为因 pluginkit BLOCKED(修订 7)标待用户验收。
 >
 > **修订 10(2026-11-10,Task 9 规格评审判「With fixes」,两处):** ① **Important·grantWrite 计数口径错位**:`FileOps.makeWritable` 经 FileWalker 遍历根节点+全部后代,返回**节点数**(文件夹含 3 文件全成功返回 4);原实现直接累加节点数与 `tried = urls.count`(顶层条目数)比较,选中文件夹授权时全成功也会误报「部分失败 4/1 项」。修法(裁决取 URL 粒度,CoreKit 保持冻结、不加节点/条目双口径元组——过度设计):`for url in urls where FileOps.makeWritable(url) > 0 { ok += 1 }`,顶层条目粒度计数,makeWritable 返回 >0 视为该条目成功;Task 9 grantWrite 代码块同步。② **Minor·compress7z 注释与实现不自洽**:原注释称相对路径「规避 7z 对含空格/特殊字符绝对路径的解析问题」,但 `out.path` 仍是绝对路径,且 Process 直传 argv 无 shell 切分问题;注释改写为如实描述(Process argv 直传说明 + 多选跨目录时相对 cwd 仅对首项目录有效的已知限制,Task 13 验收按同目录口径),Task 9 compress7z 代码块同步。
+>
+> **修订 11(2026-11-10,Task 9 质量评审通过,四条一行级打磨):** ① notify 换行族转义:`.components(separatedBy: .newlines).joined(separator: " ")` 替代单 `\n` 替换(补裸 CR 漏洞,覆盖 \r、\r\n、\n 及 Unicode 行分隔符);② ActionWindow.show doc 注释补「同 title 复用时忽略 width/height,尺寸以首次创建为准」(title 即去重键,Task 10-12 作者最易踩);③ locate7z 探测表补 p7zip 主二进制名 `7z`(Homebrew 与 /usr/local 各一,原表只有 7zz/7za 兼容入口);④ cutFiles 删冗余 `clearContents()`(declareTypes 自带 clear 语义;copyPath/copyName 走 setString 不带 clear,保留)。Task 6/8/9 代码块同步。
 
 ---
 
@@ -1074,6 +1076,7 @@ enum ActionWindow {
         return host
     }
 
+    /// 弹出操作窗;同 title 复用时忽略 width/height,尺寸以首次创建为准(title 即去重键)
     @discardableResult
     static func show(title: String, width: CGFloat, height: CGFloat,
                      @ViewBuilder content: () -> some View) -> NSWindow {
@@ -1633,7 +1636,7 @@ git commit -m "feat(ext): Finder 扩展骨架与一键构建脚本(ad-hoc 签名
         p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         let escaped = message.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: " ") // AppleScript 字面量不允许裸换行
+            .components(separatedBy: .newlines).joined(separator: " ") // AppleScript 字面量不允许裸换行(覆盖 \r、\r\n、\n 及 Unicode 行分隔符)
         p.arguments = ["-e", "display notification \"\(escaped)\" with title \"RightClickKit\""]
         try? p.run()
     }
@@ -1685,7 +1688,6 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
     @objc private func cutFiles(_ sender: NSMenuItem) {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
         let pb = NSPasteboard.general
-        pb.clearContents()
         pb.declareTypes([NSPasteboard.PasteboardType("NSFilenamesPboardType"),
                          NSPasteboard.PasteboardType("com.apple.finder.cut-for-board")], owner: nil)
         pb.setPropertyList(urls.map { $0.path(percentEncoded: false) },
@@ -1711,8 +1713,8 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
     }
 
     private func locate7z() -> String? {
-        ["/opt/homebrew/bin/7zz", "/opt/homebrew/bin/7za",
-         "/usr/local/bin/7zz", "/usr/local/bin/7za"]
+        ["/opt/homebrew/bin/7zz", "/opt/homebrew/bin/7z", "/opt/homebrew/bin/7za",
+         "/usr/local/bin/7zz", "/usr/local/bin/7z", "/usr/local/bin/7za"]
             .first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
