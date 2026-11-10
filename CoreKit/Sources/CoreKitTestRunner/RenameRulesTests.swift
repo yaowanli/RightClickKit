@@ -29,4 +29,29 @@ func runRenameTests() {
         let pairs: [(old: String, new: String)] = [("a", "x"), ("b", "x")]
         expectEqual(RenamePlanner.collisions(in: pairs), ["x"])
     }
+    test("冲突检测:链式改名(新名命中他人旧名)被判冲突") {
+        let r = RenamePlanner.plan(names: ["1.txt", "002.txt"],
+                                   rule: .sequence(base: "", start: 2, width: 3))
+        expectEqual(RenamePlanner.collisions(in: r), ["002.txt"])
+    }
+    test("冲突检测:identity 对不参与链式误报") {
+        let pairs: [(old: String, new: String)] = [("a", "a"), ("b", "x")]
+        expectEqual(RenamePlanner.collisions(in: pairs), [])
+    }
+    test("重命名:点开头隐藏文件按无扩展名处理") {
+        let r = RenamePlanner.plan(names: [".hidden"], rule: .prefix("v2_"))
+        expectEqual(r[0].new, "v2_.hidden")
+    }
+    test("重命名:多点文件只取最后一段扩展名") {
+        let r = RenamePlanner.plan(names: ["a.b.c"], rule: .prefix("x_"))
+        expectEqual(r[0].new, "x_a.b.c")
+    }
+    test("重命名:尾点文件名保留尾点") {
+        let r = RenamePlanner.plan(names: ["name."], rule: .prefix("v2_"))
+        expectEqual(r[0].new, "v2_name.")
+    }
+    test("重命名:空查找串为 no-op") {
+        let r = RenamePlanner.plan(names: ["abc"], rule: .replace(find: "", replacement: "-"))
+        expectEqual(r[0].new, "abc")
+    }
 }

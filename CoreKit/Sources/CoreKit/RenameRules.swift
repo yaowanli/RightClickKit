@@ -8,6 +8,10 @@ public enum RenameRule {
 }
 
 public enum RenamePlanner {
+    /// 纯名字级规划:返回与输入等长且同序的 (old, new) 列表,identity 对(old==new)包含在内,
+    /// 由调用方过滤。只负责名字变换;批内重复与链式冲突用 collisions(in:) 检测,
+    /// 批外磁盘同名冲突由调用方在预览层检查(需要文件系统,这里保持纯函数)。
+    /// 已知限制:replace 为字面匹配,不处理 Unicode NFC/NFD 等价。
     public static func plan(names: [String], rule: RenameRule) -> [(old: String, new: String)] {
         names.enumerated().map { i, name in
             let ext = (name as NSString).pathExtension
@@ -26,10 +30,17 @@ public enum RenamePlanner {
         }
     }
 
-    /// 返回批次内出现 ≥2 次的新名字
+    /// 返回批次内不允许直接执行的新名:出现 ≥2 次的新名,以及链式冲突
+    /// (某项的 new 等于另一非自身项的 old,如 1.txt→002.txt 而 002.txt 也在批次内)。
+    /// identity 对(old==new)不参与链式判定。排序返回,输出确定。
     public static func collisions(in pairs: [(old: String, new: String)]) -> [String] {
-        var counts: [String: Int] = [:]
-        for p in pairs { counts[p.new, default: 0] += 1 }
-        return counts.filter { $0.value > 1 }.map { $0.key }.sorted()
+        var dupNew: [String: Int] = [:]
+        for p in pairs { dupNew[p.new, default: 0] += 1 }
+        var out = Set(dupNew.filter { $0.value > 1 }.map { $0.key })
+        let olds = Set(pairs.map { $0.old })
+        for p in pairs where p.new != p.old && olds.contains(p.new) {
+            out.insert(p.new)
+        }
+        return out.sorted()
     }
 }
