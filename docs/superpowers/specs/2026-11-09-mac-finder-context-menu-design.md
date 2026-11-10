@@ -65,7 +65,7 @@ RightClickKit.app
 
 ### 乱码修复算法(CoreKit,单测覆盖)
 
-对文件名字节流按单字节误读编码(Latin-1/CP1252/MacRoman)还原,再按 UTF-8/GB18030/Big5 解码,结合乱码特征(replacement char、典型乱码字符集)给最高置信度候选;所有候选展示,用户可逐行修改。CP437 与 CJK 形误读通路列为后续候选(v2)。
+对文件名字节流按单字节误读编码(Latin-1/CP1252/MacRoman)还原,再按 UTF-8/GB18030/Big5 解码,结合乱码特征(replacement char、典型乱码字符集);所有候选展示,用户可逐行修改。CP437 与 CJK 形误读通路列为后续候选(v2)。
 
 ### 新建文件模板
 

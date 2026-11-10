@@ -21,7 +21,7 @@ swift --version          # 应 ≥ 5.9
 >
 > **修订 2(2026-11-09,Task 1 质量评审后):** harness 改为 flag 标记失败(断言失败后该 test 显示 ❌ 而非误报 ✅),main.swift 输出 tests/assertions 计数并退出前清理临时目录;makeTree 修复(临时父目录+子目录 root,原版断言必失败)已回写至 Task 1 Step 4。
 >
-> **修订 3(2026-11-09,Task 2 质量评审后):** ① 候选顺序注释改为如实描述枚举序,Task 12 改为不预选候选(默认保持原样,用户逐项确认),apply 增加空名与路径分隔符防护;② 补 CP1252/MacRoman/空串用例;③ CP437(box-drawing 形)与「UTF-8 被 GBK 误读(CJK 形)」两类真实乱码刻意不支持——把 gb18030/big5 加入中间编码会击穿「健康中文名零误报」不变量,列为 v2 候选特性;④ 执行进度以会话任务清单为准,计划 checkbox 不逐一回填。
+> **修订 3(2026-11-10,Task 2 质量评审后):** ① 候选顺序注释改为如实描述枚举序,Task 12 改为不预选候选(默认保持原样,用户逐项确认),apply 增加空名与路径分隔符防护;② 补 CP1252/MacRoman/空串用例;③ CP437(box-drawing 形)与「UTF-8 被 GBK 误读(CJK 形)」两类真实乱码刻意不支持——把 gb18030/big5 加入中间编码会击穿「健康中文名零误报」不变量,列为 v2 候选特性;④ 执行进度以会话任务清单为准,计划 checkbox 不逐一回填。
 
 ---
 
@@ -1979,7 +1979,7 @@ git commit -m "feat(app): 乱码修复窗(候选预览+逐项可改)"
 - [ ] **Step 1: 全量跑一遍测试与构建**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner && cd .. && ./build.sh`
-Expected: 20 个 `✅` ALL TESTS PASSED + 构建成功
+Expected: 23 个 `✅` ALL TESTS PASSED + 构建成功
 
 - [ ] **Step 2: 写 README(使用说明)**
 
