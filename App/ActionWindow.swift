@@ -14,7 +14,8 @@ enum ActionWindow {
         return host
     }
 
-    /// 弹出操作窗;同 title 复用时忽略 width/height,尺寸以首次创建为准(title 即去重键)
+    /// 弹出操作窗;同 title 复用时忽略 width/height,尺寸以首次创建为准(title 即去重键)。
+    /// 复用即整体替换 contentView → 全新 view 树,@State 天然重置,调用方无需手动清状态。
     @discardableResult
     static func show(title: String, width: CGFloat, height: CGFloat,
                      @ViewBuilder content: () -> some View) -> NSWindow {

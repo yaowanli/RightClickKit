@@ -32,7 +32,7 @@ struct DeleteForeverView: View {
                 Button("取消") { closeWindow() }.keyboardShortcut(.cancelAction).disabled(working)
                 Button(working ? "删除中…" : "彻底删除") { delete() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!acknowledged || working)
+                    .disabled(!acknowledged || working || done)
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
             }
