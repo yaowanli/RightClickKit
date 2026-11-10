@@ -16,8 +16,7 @@ func runFileWalkerTests() {
 
 /// root/  a.txt(5B)  sub/b.txt(4B)
 private func makeTree() throws -> (URL, [URL]) {
-    let parent = FileManager.default.temporaryDirectory
-        .appendingPathComponent("walk-\(UUID().uuidString)")
+    let parent = try makeTempDir()
     let root = parent.appendingPathComponent("root")
     let sub = root.appendingPathComponent("sub")
     try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
