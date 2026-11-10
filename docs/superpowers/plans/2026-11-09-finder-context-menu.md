@@ -32,6 +32,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 7(2026-11-10,Task 6/7 执行中):** 实测裁决 SwiftPM 自动产出 libCoreKit.a(无需 products 声明/libtool);主 App 增加最小应用菜单修 Cmd+Q;根 .gitignore(.build/)入库。FinderSync API 以 SDK 实名为准(基类 `FIFinderSync`/枚举 `FIMenuKind`,SDK 无 `FNSyncExtension`/`FNSyncMenuKind`/`FinderSyncExtensionMain`),appex 入口用 Foundation `_NSExtensionMain`(无 main.swift,`-Xlinker -e -Xlinker _NSExtensionMain`)。⚠️ **实测 macOS 26 pkd 拒绝注册 ad-hoc 签名的 appex**:`pluginkit -a` 静默无效果、`pluginkit -m` 恒空;对照实验(同一 WPS appex:真实证书签名在 /tmp 可注册,ad-hoc 重签同标识符更高版本仍被拒)证明拦截发生在签名身份层;本机 0 个 codesigning 身份,纯 CLT(无 Xcode)无法自产 Apple Development 证书 → 「pluginkit 发现扩展」一步 BLOCKED,待用户决策(装真实签名证书,或 Task 13 验收时在系统设置「添加扩展」手动尝试);其余链路(构建/组装/双 plist lint/ad-hoc 签名/App 启动)全部实测通过。
 >
 > **修订 8(2026-11-10,Task 8 执行中,含评审确认的四项顺手修复):** ① FinderSync API 实名再裁决:`FIFinderSyncController` **无** `targetURL()`,SDK 头文件实名为 `targetedURL()`(返回 Finder 当前目标 URL——文件夹背景右键时即当前文件夹;仅在 `menu(for:)` 与其菜单 action 内有效),Task 8 代码块与 Task 7 的 copyPath 均按实名回写。② **copyPath 空选择回退**(质量评审 Important):文件夹背景右键时 `selectedItemURLs` 为空,原实现静默无效,而这恰是「拷贝当前文件夹路径」最自然手势;改为空选择回退 `targetedURL()` 拷当前文件夹路径,两者皆无才 return;同函数改用 `path(percentEncoded: false)` 消除历史百分号编码歧义(仅改动范围应用,Task 9 复制此模式,不全局翻新)。③ **build.sh 自检与签名参数化**(质量评审 Important + Minor):头部 `SIGN_IDENTITY="${SIGN_IDENTITY:--}"`(默认 ad-hoc 行为不变,为真实证书预留);签名后新增自检 `codesign --verify --deep --strict`(appex 与 $APP 各一次,对应先内后外)与两个 plist 的 `plutil -lint`(set -e 保证失败即停);末尾 `codesign -dv | head` 加 `|| true` 防 SIGPIPE;Task 7 代码块同步为最终形态。④ **ActionWindow 修复**(fix(app),原排 Task 10 前):`alive` 字典按 action(以标题为键,三个调用方标题互异)去重——同 action 重复唤起复用窗口(更新内容 + `makeKeyAndOrderFront` 置前)不叠开;willClose 时移除 observer token 修复泄漏;`show` 签名不变、调用方零改动,Task 6 代码块同步。Task 8 的 Finder UI 实测与 Task 7 同因 pluginkit BLOCKED(修订 7),标「待用户验收」。
+>
+> **修订 9(2026-11-10,Task 9 执行中,含 Task 8 评审确认的五项顺手改进 A-E):** ① **add(to:) 复用 Feature.title**(A,消除 11 处菜单标题双写):签名去掉 title 参数、内部取 `feature.title`;Task 7/8/9 全部菜单代码块同步。执行前逐项核对 Feature.title 与原菜单字面量:**11 处完全一致,无裁决偏差**;新建文件子菜单 5 个模板项(TXT 文本等)无 Feature 对应,保持字面量。② **image(_:) 图标辅助**(B):systemSymbolName + 16pt 定尺寸收敛为私有辅助,add(to:) 与子菜单循环(父项/循环/add 三处)改用。③ **notify() 转义链补换行**(C):尾接 `.replacingOccurrences(of: "\n", with: " ")`(AppleScript 字面量不允许裸换行,error 消息可能携带);仍 fire-and-forget 不改 wait 语义。④ **runTool(executable:arguments:cwd:) 辅助**(D):compressZip/compress7z 的 Process→run→waitUntilExit→退出码检查收敛为共用私有辅助(启动失败返回 nil,调用方各自 notify;notify 不并入,保持 fire-and-forget 不阻塞主线程);baseName 辅助同时供两处压缩取输出基名。⑤ **path(percentEncoded: false) 延续**(E,Task 8 定调模式):cutFiles 剪贴板路径数组、openInApp 的 ActionPayload paths、compressZip 的 ditto 参数均改用显式解码;7z 因 cwd+相对路径模式保持 `$0.lastPathComponent` 不变。⑥ **fix(app) ActionWindow 窗口被压小**(Task 9 冒烟新发现,超出 A-E 范围单列一笔 commit):实测 macOS 26 的 NSHostingView 默认按 SwiftUI 理想尺寸驱动窗口——ActionWindow 创建 420x200 动作窗后,runloop 布局阶段窗口被压成内容固有大小 71x48(临时 stderr 埋点 + CGWindowList 双重实证,CLI 进程不可复现,须真实 App 事件循环);修复:新建 `makeHost` 辅助统一设 `sizingOptions = []`,新建与复用(重复唤起替换 contentView)两条路径都走,实测窗口稳定保持 420x200+标题栏,Task 6 代码块同步。⑦ **Step 4 冒烟实证**:`open "rightclickkit://batch-rename?p=…"` **冷启动直达**——LaunchServices 依据 App-Info.plist 的 CFBundleURLTypes 直接拉起主 App 并送达 URL,无需先手动启动注册 scheme;占位窗(标题「批量重命名」、内容「待实现」)正常弹出,新建与复用两路径均验证,测毕 pkill 清场。另录得非致命噪音:主 App 进程内 UserDefaults(suiteName:) 因 suite 等于自身 bundle id 打 warning("will not work"),FeatureStore 回退 UserDefaults.standard 后落盘同一 plist(com.yaowl.RightClickKit.plist),扩展按 suite 读同一文件,**开关仍互通**,暂不处理。cutFiles 剪贴板与全部 Finder UI 行为因 pluginkit BLOCKED(修订 7)标待用户验收。
 
 ---
 
@@ -1052,7 +1054,7 @@ final class SettingsWindow {
 }
 ```
 
-`App/ActionWindow.swift`(已回写为仓库现状:按 action 去重复用窗口置前不叠开,willClose 移除 observer 修复泄漏,见顶部修订 8④):
+`App/ActionWindow.swift`(已回写为仓库现状:按 action 去重复用窗口置前不叠开,willClose 移除 observer 修复泄漏,见顶部修订 8④;makeHost 关闭 macOS 26 NSHostingView 自动定尺寸,见顶部修订 9⑥):
 ```swift
 import AppKit
 import SwiftUI
@@ -1062,11 +1064,19 @@ import SwiftUI
 enum ActionWindow {
     private static var alive: [String: (window: NSWindow, observer: NSObjectProtocol)] = [:]
 
+    /// macOS 26:NSHostingView 默认按 SwiftUI 理想尺寸驱动窗口,会把窗口锁到内容固有大小(如 71x48);
+    /// 关掉 sizingOptions 恢复由 contentRect 指定的窗口尺寸。新建与复用路径都必须走这里。
+    private static func makeHost<Content: View>(_ content: Content) -> NSHostingView<Content> {
+        let host = NSHostingView(rootView: content)
+        host.sizingOptions = []
+        return host
+    }
+
     @discardableResult
     static func show(title: String, width: CGFloat, height: CGFloat,
                      @ViewBuilder content: () -> some View) -> NSWindow {
         if let entry = alive[title] {
-            entry.window.contentView = NSHostingView(rootView: content())
+            entry.window.contentView = makeHost(content())
             entry.window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return entry.window
@@ -1076,7 +1086,7 @@ enum ActionWindow {
                          backing: .buffered, defer: false)
         w.title = title
         w.isReleasedWhenClosed = false
-        w.contentView = NSHostingView(rootView: content())
+        w.contentView = makeHost(content())
         w.center()
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
@@ -1336,6 +1346,8 @@ git commit -m "feat(app): 主 App 骨架、设置窗与 URL 动作分发"
 > 本节执行说明(2026-11-10):经实测裁决,`swift build -c release` 自动产出 `libCoreKit.a`(executableTarget 依赖触发静态归档),build.sh 的 swiftc 链接命令无需任何前置归档步骤;根 `.gitignore`(`.build/`)与主 App 最小应用菜单(Cmd+Q)随本任务一并入库。另两项实测裁决:① 本 SDK(macOS 26 纯 CLT)的 FinderSync 框架为经典 ObjC 接口,基类实名 `FIFinderSync`、菜单枚举实名 `FIMenuKind`,计划原稿的 `FNSyncExtension`/`FNSyncMenuKind`/`FinderSyncExtensionMain` 在 SDK 中不存在;appex 无 Swift 顶层入口,链接时用 Foundation 的 `_NSExtensionMain` 作入口(`-Xlinker -e -Xlinker _NSExtensionMain`),系统经 Info.plist `NSExtensionPrincipalClass` 实例化主类,**不需要也不存在** `FinderSyncExt/main.swift`。② ⚠️ ad-hoc 签名的 appex 无法进入 pluginkit 数据库(`pluginkit -a` 静默拒绝,`pluginkit -m` 恒空;对照组:同一 WPS appex 真实证书签名可注册、ad-hoc 重签后同标识符更高版本仍被拒;本机 `security find-identity` 为 0,纯 CLT 无 Xcode 无法自产 Apple Development 证书)——「pluginkit 发现扩展」一步 BLOCKED,待用户决策:装真实签名证书,或 Task 13 验收时在 系统设置 → 登录项与扩展 → 添加扩展 手动尝试。其余链路(构建/组装/签名/plutil/App 启动)全部验证通过。
 >
 > 执行说明补记(2026-11-10,Task 8 执行中):下方两个代码块已随修订 8 ①②③ 回写为最终形态——copyPath 空选择回退 `targetedURL()`(SDK 实名,原 `targetURL()` 不存在)+ `path(percentEncoded: false)`;build.sh `SIGN_IDENTITY` 参数化、签名/plist 自检、`codesign -dv | head` 加 `|| true`。
+>
+> 执行说明补记 2(2026-11-10,Task 9 执行中):FinderSync.swift 代码块再次随修订 9 A/B 回写为最终形态——add(to:) 去掉 title 参数、内部取 `feature.title`,新增 `image(_:)` 图标辅助。
 
 **Files:**
 - Create: `FinderSyncExt/FinderSync.swift`
@@ -1363,21 +1375,25 @@ class FinderSync: FIFinderSync {
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
         let menu = NSMenu(title: "RightClickKit")
-        add(to: menu, "拷贝路径", symbol: "link", feature: .copyPath,
+        add(to: menu, symbol: "link", feature: .copyPath,
             action: #selector(copyPath(_:)))
         return menu
     }
 
-    private func add(to menu: NSMenu, _ title: String, symbol: String,
+    private func add(to menu: NSMenu, symbol: String,
                      feature: Feature, action: Selector) {
         guard FeatureStore.isEnabled(feature) else { return }
-        let item = NSMenuItem(title: title, action: action, keyEquivalent: "")
+        let item = NSMenuItem(title: feature.title, action: action, keyEquivalent: "")
         item.target = self
-        if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
-            img.size = NSSize(width: 16, height: 16)
-            item.image = img
-        }
+        item.image = image(symbol)
         menu.addItem(item)
+    }
+
+    /// SF Symbol 图标统一 16pt;符号名无效时返回 nil(菜单项无图,不致命)
+    private func image(_ symbol: String) -> NSImage? {
+        guard let img = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) else { return nil }
+        img.size = NSSize(width: 16, height: 16)
+        return img
     }
 
     @objc private func copyPath(_ sender: NSMenuItem) {
@@ -1513,6 +1529,8 @@ git commit -m "feat(ext): Finder 扩展骨架与一键构建脚本(ad-hoc 签名
 ## Task 8: 扩展功能批次一(新建文件/新建文件夹/拷贝名称)
 
 > 本节执行说明(2026-11-10):四个 action 与新建文件子菜单(5 项)全部实装,菜单顺序为 新建文件(子菜单)/新建文件夹/使用文件名新建文件夹/拷贝文件(夹)名称/拷贝路径(末项为 Task 7 既有)。⚠️ 计划原稿的 `controller.targetURL()` 在 SDK 中不存在,头文件实名为 `targetedURL()`(返回 Finder 当前目标 URL,文件夹背景右键时即当前文件夹;仅 `menu(for:)` 与其菜单 action 内有效),已按实名回写下方代码块(见顶部修订 8①)。Step 4 的 Finder UI 实测因「子 agent 无法操作 Finder UI + pluginkit 注册 BLOCKED(修订 7)」标**待用户验收**,留待 Task 13;其余步骤(构建/自检/冒烟/CoreKit 34 测试)已通过。
+>
+> 执行说明补记(2026-11-10,Task 9 执行中):本节两个代码块已随修订 9 A/B/C 回写为最终形态——add(to:) 去掉 title 参数取 `feature.title`、`image(_:)` 图标辅助、notify() 转义链补换行。
 
 **Files:**
 - Modify: `FinderSyncExt/FinderSync.swift`
@@ -1525,9 +1543,7 @@ git commit -m "feat(ext): Finder 扩展骨架与一键构建脚本(ad-hoc 签名
         // —— 新建文件子菜单 ——
         if FeatureStore.isEnabled(.newFile) {
             let newFile = NSMenuItem(title: "新建文件", action: nil, keyEquivalent: "")
-            if let img = NSImage(systemSymbolName: "doc.badge.plus", accessibilityDescription: nil) {
-                img.size = NSSize(width: 16, height: 16); newFile.image = img
-            }
+            newFile.image = image("doc.badge.plus")
             let sub = NSMenu(title: "新建文件")
             let templates: [(String, String, String)] = [
                 ("TXT 文本", "txt", "doc.plaintext"),
@@ -1540,19 +1556,17 @@ git commit -m "feat(ext): Finder 扩展骨架与一键构建脚本(ad-hoc 签名
                 let it = NSMenuItem(title: title, action: #selector(newTemplateFile(_:)), keyEquivalent: "")
                 it.target = self
                 it.representedObject = ext
-                if let img = NSImage(systemSymbolName: symbol, accessibilityDescription: nil) {
-                    img.size = NSSize(width: 16, height: 16); it.image = img
-                }
+                it.image = image(symbol)
                 sub.addItem(it)
             }
             newFile.submenu = sub
             menu.addItem(newFile)
         }
-        add(to: menu, "新建文件夹", symbol: "folder.badge.plus", feature: .newFolder,
+        add(to: menu, symbol: "folder.badge.plus", feature: .newFolder,
             action: #selector(newFolder(_:)))
-        add(to: menu, "使用文件名新建文件夹", symbol: "doc.badge.arrow.up", feature: .folderFromName,
+        add(to: menu, symbol: "doc.badge.arrow.up", feature: .folderFromName,
             action: #selector(folderFromName(_:)))
-        add(to: menu, "拷贝文件(夹)名称", symbol: "doc.on.doc", feature: .copyName,
+        add(to: menu, symbol: "doc.on.doc", feature: .copyName,
             action: #selector(copyName(_:)))
 ```
 
@@ -1617,6 +1631,7 @@ git commit -m "feat(ext): Finder 扩展骨架与一键构建脚本(ad-hoc 签名
         p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         let escaped = message.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
+            .replacingOccurrences(of: "\n", with: " ") // AppleScript 字面量不允许裸换行
         p.arguments = ["-e", "display notification \"\(escaped)\" with title \"RightClickKit\""]
         try? p.run()
     }
@@ -1643,19 +1658,21 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
 
 ## Task 9: 扩展功能批次二(剪切/压缩/授权限/唤起主 App 三项)
 
+> 本节执行说明(2026-11-10):7 个菜单项与 action 全部实装;下方代码块已随修订 9 A-E 回写为最终形态(add 复用 Feature.title/image 辅助/runTool 辅助/path(percentEncoded: false)/notify 换行转义)。Step 4 冒烟实测:**冷启动直达**(LaunchServices 依 CFBundleURLTypes 拉起主 App 并送达 URL,无需先手动启动注册 scheme),占位窗正常弹出;期间发现并修复 macOS 26 NSHostingView 压窗问题(修订 9⑥,fix(app) 单独一笔)。⚠️ cutFiles 剪贴板行为与全部 Finder UI 实测因 pluginkit BLOCKED(修订 7)标**待用户验收**,留待 Task 13。CoreKit 零改动,34 测试保持全绿。
+
 **Files:**
 - Modify: `FinderSyncExt/FinderSync.swift`
 
 - [ ] **Step 1: menu(for:) 补齐剩余项(按此顺序)**
 
 ```swift
-        add(to: menu, "剪切", symbol: "scissors", feature: .cut, action: #selector(cutFiles(_:)))
-        add(to: menu, "压缩为 zip", symbol: "doc.zipper", feature: .compressZip, action: #selector(compressZip(_:)))
-        add(to: menu, "压缩为 7z", symbol: "archivebox", feature: .compress7z, action: #selector(compress7z(_:)))
-        add(to: menu, "授予写入权限", symbol: "lock.open", feature: .grantWrite, action: #selector(grantWrite(_:)))
-        add(to: menu, "彻底删除", symbol: "trash", feature: .deleteForever, action: #selector(deleteForever(_:)))
-        add(to: menu, "批量重命名", symbol: "character.textbox", feature: .batchRename, action: #selector(batchRename(_:)))
-        add(to: menu, "修复乱码文件名", symbol: "wand.and.stars", feature: .fixMojibake, action: #selector(fixMojibake(_:)))
+        add(to: menu, symbol: "scissors", feature: .cut, action: #selector(cutFiles(_:)))
+        add(to: menu, symbol: "doc.zipper", feature: .compressZip, action: #selector(compressZip(_:)))
+        add(to: menu, symbol: "archivebox", feature: .compress7z, action: #selector(compress7z(_:)))
+        add(to: menu, symbol: "lock.open", feature: .grantWrite, action: #selector(grantWrite(_:)))
+        add(to: menu, symbol: "trash", feature: .deleteForever, action: #selector(deleteForever(_:)))
+        add(to: menu, symbol: "character.textbox", feature: .batchRename, action: #selector(batchRename(_:)))
+        add(to: menu, symbol: "wand.and.stars", feature: .fixMojibake, action: #selector(fixMojibake(_:)))
 ```
 
 - [ ] **Step 2: 实现剪切/压缩/授权限(类内新增)**
@@ -1667,24 +1684,25 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
         pb.clearContents()
         pb.declareTypes([NSPasteboard.PasteboardType("NSFilenamesPboardType"),
                          NSPasteboard.PasteboardType("com.apple.finder.cut-for-board")], owner: nil)
-        pb.setPropertyList(urls.map { $0.path },
+        pb.setPropertyList(urls.map { $0.path(percentEncoded: false) },
                            forType: NSPasteboard.PasteboardType("NSFilenamesPboardType"))
         pb.setString("1", forType: NSPasteboard.PasteboardType("com.apple.finder.cut-for-board"))
-        // 验证点:Finder 中 Cmd+V 应回退为「移动」。若失效,降级方案:notify("已记录,请在 App 内粘贴") — 先按此实现验证
+        // 验证点:Finder 中 Cmd+V 应回退为「移动」。若失效,降级方案:notify("已记录,请在 App 内粘贴")
+        // (pluginkit 注册 BLOCKED,Finder 实际行为待用户验收)
     }
 
     @objc private func compressZip(_ sender: NSMenuItem) {
         guard let urls = controller.selectedItemURLs(), let first = urls.first else { return }
         let dir = first.deletingLastPathComponent()
-        let base = first.deletingPathExtension().lastPathComponent
-        let out = dir.appendingPathComponent(PathUtils.uniqueName(in: dir, base: base, ext: "zip"))
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-        p.arguments = ["-c", "-k", "--sequesterRsrc", "--keepParent"] + urls.map { $0.path } + [out.path]
-        do {
-            try p.run(); p.waitUntilExit()
-            if p.terminationStatus != 0 { notify("zip 压缩失败(退出码 \(p.terminationStatus))"); return }
-        } catch { notify("zip 压缩失败:\(error.localizedDescription)"); return }
+        let out = dir.appendingPathComponent(
+            PathUtils.uniqueName(in: dir, base: baseName(first), ext: "zip"))
+        guard let status = runTool(
+            executable: "/usr/bin/ditto",
+            arguments: ["-c", "-k", "--sequesterRsrc", "--keepParent"]
+                + urls.map { $0.path(percentEncoded: false) } + [out.path]) else {
+            notify("zip 压缩失败:无法启动 ditto"); return
+        }
+        if status != 0 { notify("zip 压缩失败(退出码 \(status))"); return }
         NSWorkspace.shared.activateFileViewerSelecting([out])
     }
 
@@ -1700,15 +1718,16 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
             notify("未找到 7zz/7za,请执行:brew install p7zip"); return
         }
         let dir = first.deletingLastPathComponent()
-        let out = dir.appendingPathComponent(PathUtils.uniqueName(in: dir, base: baseName(first), ext: "7z"))
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: seven)
-        p.arguments = ["a", "-bd", out.path] + urls.map { $0.lastPathComponent }
-        p.currentDirectoryPath = dir.path
-        do {
-            try p.run(); p.waitUntilExit()
-            if p.terminationStatus != 0 { notify("7z 压缩失败(退出码 \(p.terminationStatus))"); return }
-        } catch { notify("7z 压缩失败:\(error.localizedDescription)"); return }
+        let out = dir.appendingPathComponent(
+            PathUtils.uniqueName(in: dir, base: baseName(first), ext: "7z"))
+        // cwd 设为目标目录、参数用 lastPathComponent 相对路径,规避 7z 对含空格/特殊字符绝对路径的解析问题
+        guard let status = runTool(
+            executable: seven,
+            arguments: ["a", "-bd", out.path] + urls.map { $0.lastPathComponent },
+            cwd: dir.path) else {
+            notify("7z 压缩失败:无法启动 7zz/7za"); return
+        }
+        if status != 0 { notify("7z 压缩失败(退出码 \(status))"); return }
         NSWorkspace.shared.activateFileViewerSelecting([out])
     }
 
@@ -1727,6 +1746,17 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
     private func baseName(_ url: URL) -> String {
         url.deletingPathExtension().lastPathComponent
     }
+
+    /// 同步运行外部工具并返回退出码;启动失败返回 nil。notify 由调用方负责(不并入,保持 fire-and-forget)
+    private func runTool(executable: String, arguments: [String], cwd: String? = nil) -> Int32? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: executable)
+        p.arguments = arguments
+        if let cwd { p.currentDirectoryPath = cwd }
+        do { try p.run() } catch { return nil }
+        p.waitUntilExit()
+        return p.terminationStatus
+    }
 ```
 
 - [ ] **Step 3: 实现唤起主 App 的三项(类内新增)**
@@ -1734,7 +1764,8 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
 ```swift
     private func openInApp(action: String) {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
-        guard let url = ActionPayload(action: action, paths: urls.map { $0.path }).makeURL() else {
+        guard let url = ActionPayload(action: action,
+                                      paths: urls.map { $0.path(percentEncoded: false) }).makeURL() else {
             notify("无法构造动作 URL"); return
         }
         if !NSWorkspace.shared.open(url) {
@@ -1750,15 +1781,12 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
 - [ ] **Step 4: 构建 + URL 链路冒烟**
 
 Run: `./build.sh`
-Expected: 构建成功
+Expected: 构建成功(退出码 0,签名/plist 自检全过)
 
-Run: `open "rightclickkit://action/batch-rename?p=%5B%22%2Ftmp%22%5D"`
-Expected: 主 App 前台弹出「批量重命名(待实现)」占位窗(URL host 是 `action`、path 第一段是动作名 —— 若 parse 不匹配,以 CoreKit 测试为准修正构造端)
-
-注意:上一步构造的 URL host=`action`,而 Task 4 的 `makeURL()` host=动作名(`rightclickkit://batch-rename?p=...`)。冒烟命令相应改为:
 Run: `open "rightclickkit://batch-rename?p=%5B%22%2Ftmp%22%5D"`
+Expected: 主 App 前台弹出「批量重命名」占位窗(contentRect 420x200,内容「待实现」;host=动作名,与 CoreKit ActionPayload.makeURL() 一致)。实测(2026-11-10,修订 9⑦):冷启动直达,无需先启动 App 注册 scheme;同 action 二次唤起走复用路径不叠开。注意:曾实测窗口被压成内容固有尺寸 71x48,系 macOS 26 NSHostingView 默认行为,已在主 App 侧修复(修订 9⑥)。
 
-Expected: 占位窗弹出。
+测毕清场:`pkill -x RightClickKit`
 
 - [ ] **Step 5: 提交**
 
