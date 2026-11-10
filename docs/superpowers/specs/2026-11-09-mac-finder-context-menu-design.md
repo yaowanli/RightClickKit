@@ -44,7 +44,7 @@ RightClickKit.app
 - **进程分工**:拷贝路径、剪切、新建文件/文件夹、压缩、授权限在扩展进程内直接完成;需要 UI 的操作(彻底删除确认、乱码修复预览、批量重命名)经 URL scheme `rightclickkit://action=...` 唤起主 App。
 - **非沙盒**:扩展继承主 App 非沙盒状态,直接访问文件系统。
 - **启用方式**:首次运行引导用户到 系统设置 → 登录项与扩展 → Finder 扩展 开启(一次性)。
-- **传参**:扩展通过 `NSWorkspace.open(_:configuration:)` 唤起主 App,URL 带 action 类型(`rightclickkit://action=batch-rename`),`OpenConfiguration.arguments` 带选中的文件路径列表,不落盘。
+- **传参**:扩展通过 `NSWorkspace.open` 唤起主 App,URL 为 `rightclickkit://<action>?p=<JSON 路径数组>`(host=action,payload 在 query,经百分号编码,不落盘;实测 Darwin 25 无 64KB 长度限制)。
 
 ## 4. 菜单项功能明细
 

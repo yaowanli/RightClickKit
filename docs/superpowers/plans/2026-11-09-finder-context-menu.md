@@ -24,6 +24,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 3(2026-11-10,Task 2 质量评审后):** ① 候选顺序注释改为如实描述枚举序,Task 12 改为不预选候选(默认保持原样,用户逐项确认),apply 增加空名与路径分隔符防护;② 补 CP1252/MacRoman/空串用例;③ CP437(box-drawing 形)与「UTF-8 被 GBK 误读(CJK 形)」两类真实乱码刻意不支持——把 gb18030/big5 加入中间编码会击穿「健康中文名零误报」不变量,列为 v2 候选特性;④ 执行进度以会话任务清单为准,计划 checkbox 不逐一回填。
 >
 > **修订 4(2026-11-10,Task 3 质量评审后):** collisions 计入链式冲突(新名命中他人旧名,identity 对排除);plan() 注释固化三层职责(名字规划/批内冲突/批外磁盘冲突归 UI 预览);Task 11 补磁盘同名预览检查、空名与路径分隔符防护、序号起始非负;补 dotfile/多点/尾点/空查找/链式/identity 6 个钉子测试(累计 19→25,Task 4 23→29,Task 13 23→29);replace 的 NFC/NFD 字面匹配列为已知限制。
+>
+> **修订 5(2026-11-10,Task 4 质量评审后):** makeWritable 返回成功计数(Int,@discardableResult),Task 9 按成功/失败分口径通知;Task 9 openInApp 检查 NSWorkspace.open 返回值(false 时提示先运行主 App);Task 6 ActionRouter 对空 paths 不弹窗;规格传参描述同步为 URL query 机制;补 IPC 特殊字符/空数组/缺 p 与移动无冲突/无扩展名冲突 5 个钉子测试(累计 29→34,Task 13 34);URL 容量实测无 64KB 限制,不加路径数上限。
 
 ---
 
@@ -576,6 +578,25 @@ func runActionPayloadTests() {
         expectTrue(ActionPayload.parse(URL(string: "https://example.com/p=1")!) == nil,
                    "https URL 不应被解析")
     }
+    test("ActionPayload:往返保留 +&#%\" 特殊字符") {
+        let p = ActionPayload(action: "copy-path",
+                              paths: ["/tmp/a+b&c#d%e\"f.txt"])
+        guard let url = p.makeURL() else {
+            expectTrue(false, "makeURL 不应返回 nil"); return
+        }
+        expectEqual(ActionPayload.parse(url), p)
+    }
+    test("ActionPayload:空路径数组往返") {
+        let p = ActionPayload(action: "cut", paths: [])
+        guard let url = p.makeURL() else {
+            expectTrue(false, "makeURL 不应返回 nil"); return
+        }
+        expectEqual(ActionPayload.parse(url), p)
+    }
+    test("ActionPayload:缺 p 参数判 nil") {
+        expectTrue(ActionPayload.parse(URL(string: "rightclickkit://a")!) == nil,
+                   "缺 p 不应被解析")
+    }
 }
 ```
 
@@ -587,12 +608,36 @@ import CoreKit
 func runFileOpsTests() {
     test("FileOps:移动冲突时自动改名为 x 2.ext") {
         let dir = try makeTempDir()
-        let a = dir.appendingPathComponent("x.txt")
+        // 源与目标必须是不同路径(同路径会变成"移到自己"的退化场景)
+        let srcDir = try makeTempDir()
+        let a = srcDir.appendingPathComponent("x.txt")
         try Data("1".utf8).write(to: a)
         let dst = dir.appendingPathComponent("x.txt")
         try Data("2".utf8).write(to: dst)
         let final = try FileOps.moveWithoutClobber(from: a, to: dst)
         expectEqual(final.lastPathComponent, "x 2.txt")
+        expectEqual(try String(contentsOf: final, encoding: .utf8), "1")
+        expectEqual(try String(contentsOf: dst, encoding: .utf8), "2")
+    }
+    test("FileOps:无冲突直接移动") {
+        let dir = try makeTempDir()
+        let a = dir.appendingPathComponent("a.txt")
+        try Data("1".utf8).write(to: a)
+        let dst = dir.appendingPathComponent("x.txt")
+        let final = try FileOps.moveWithoutClobber(from: a, to: dst)
+        expectEqual(final, dst)
+        expectEqual(try String(contentsOf: dst, encoding: .utf8), "1")
+        expectEqual(FileManager.default.fileExists(atPath: a.path), false)
+    }
+    test("FileOps:冲突且无扩展名时移为 x 2") {
+        let dir = try makeTempDir()
+        let srcDir = try makeTempDir()
+        let a = srcDir.appendingPathComponent("x")
+        try Data("1".utf8).write(to: a)
+        let dst = dir.appendingPathComponent("x")
+        try Data("2".utf8).write(to: dst)
+        let final = try FileOps.moveWithoutClobber(from: a, to: dst)
+        expectEqual(final.lastPathComponent, "x 2")
         expectEqual(try String(contentsOf: final, encoding: .utf8), "1")
         expectEqual(try String(contentsOf: dst, encoding: .utf8), "2")
     }
@@ -603,7 +648,7 @@ func runFileOpsTests() {
         let fm = FileManager.default
         try fm.setAttributes([.posixPermissions: 0o444, .immutable: true], ofItemAtPath: f.path)
         FileOps.makeWritable(f)
-        let attrs = fm.attributesOfItem(atPath: f.path)
+        let attrs = try fm.attributesOfItem(atPath: f.path)
         let perms = (attrs[.posixPermissions] as? NSNumber)?.int16Value ?? 0
         expectEqual(perms & 0o200, Int16(0o200))
         expectEqual(attrs[.immutable] as? Bool, false)
@@ -653,12 +698,13 @@ public struct ActionPayload: Equatable {
     }
 
     public static func parse(_ url: URL) -> ActionPayload? {
-        guard url.scheme?.lowercased() == "rightclickkit", !url.host!.isEmpty,
+        guard url.scheme?.lowercased() == "rightclickkit",
+              let host = url.host, !host.isEmpty,
               let comps = URLComponents(url: url, resolvingAgainstBaseURL: false),
               let v = comps.queryItems?.first(where: { $0.name == "p" })?.value,
               let data = v.data(using: .utf8),
               let paths = try? JSONDecoder().decode([String].self, from: data) else { return nil }
-        return ActionPayload(action: url.host ?? "", paths: paths)
+        return ActionPayload(action: host, paths: paths)
     }
 }
 ```
@@ -731,7 +777,7 @@ public enum FileOps {
         var i = 2
         var candidate = to
         while fm.fileExists(atPath: candidate.path) {
-            let stem = i == 1 ? base : "\(base) \(i)"
+            let stem = "\(base) \(i)"
             candidate = dir.appendingPathComponent(ext.isEmpty ? stem : "\(stem).\(ext)")
             i += 1
         }
@@ -739,16 +785,23 @@ public enum FileOps {
         return candidate
     }
 
-    /// 解除锁定(UF_IMMUTABLE)并给属主加写权限(递归)
-    public static func makeWritable(_ url: URL) {
+    /// 解除锁定(UF_IMMUTABLE)并给属主加写权限(递归)。
+    /// 返回成功处理的节点数(目录与文件同口径:两步 setAttributes 都成功才计 1);
+    /// 失败常见于属主不是当前用户,调用方按成功/失败分口径提示。
+    @discardableResult
+    public static func makeWritable(_ url: URL) -> Int {
         let fm = FileManager.default
+        var ok = 0
         FileWalker.walk(url) { f in
-            try? fm.setAttributes([.immutable: false], ofItemAtPath: f.path)
-            if let mode = (fm.attributesOfItem(atPath: f.path)[.posixPermissions] as? NSNumber)?.int16Value {
-                try? fm.setAttributes([.posixPermissions: NSNumber(value: mode | 0o200)], ofItemAtPath: f.path)
+            let unlockOK = (try? fm.setAttributes([.immutable: false], ofItemAtPath: f.path)) != nil
+            var chmodOK = false
+            if let mode = ((try? fm.attributesOfItem(atPath: f.path))?[.posixPermissions] as? NSNumber)?.int16Value {
+                chmodOK = (try? fm.setAttributes([.posixPermissions: NSNumber(value: mode | 0o200)], ofItemAtPath: f.path)) != nil
             }
+            if unlockOK && chmodOK { ok += 1 }
             return true
         }
+        return ok
     }
 }
 ```
@@ -756,7 +809,7 @@ public enum FileOps {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner`
-Expected: 累计 29 个 `✅`,末尾 `ALL TESTS PASSED`
+Expected: 累计 34 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -1015,6 +1068,7 @@ import CoreKit
 enum ActionRouter {
     static func handle(_ payload: ActionPayload) {
         let urls = payload.paths.map { URL(fileURLWithPath: $0) }
+        guard !urls.isEmpty else { return }  // 空 p=%5B%5D 不弹空窗
         DispatchQueue.main.async {
             switch payload.action {
             case "delete-forever": DeleteForeverView.show(urls: urls)
@@ -1610,8 +1664,14 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
 
     @objc private func grantWrite(_ sender: NSMenuItem) {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
-        for url in urls { FileOps.makeWritable(url) }
-        notify("已授予写入权限(\(urls.count) 项)")
+        var ok = 0
+        for url in urls { ok += FileOps.makeWritable(url) }
+        let tried = urls.count
+        if ok == tried {
+            notify("已授予写入权限(\(tried) 项)")
+        } else {
+            notify("已授予写入权限 \(ok)/\(tried) 项,部分失败(可能属主不是当前用户)")
+        }
     }
 
     private func baseName(_ url: URL) -> String {
@@ -1627,7 +1687,9 @@ git commit -m "feat(ext): 新建文件/新建文件夹/使用文件名新建文�
         guard let url = ActionPayload(action: action, paths: urls.map { $0.path }).makeURL() else {
             notify("无法构造动作 URL"); return
         }
-        NSWorkspace.shared.open(url)
+        if !NSWorkspace.shared.open(url) {
+            notify("无法唤起主 App,请先运行一次 RightClickKit")
+        }
     }
 
     @objc private func deleteForever(_ sender: NSMenuItem) { openInApp(action: "delete-forever") }
@@ -2029,7 +2091,7 @@ git commit -m "feat(app): 乱码修复窗(候选预览+逐项可改)"
 - [ ] **Step 1: 全量跑一遍测试与构建**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner && cd .. && ./build.sh`
-Expected: 29 个 `✅` ALL TESTS PASSED + 构建成功
+Expected: 34 个 `✅` ALL TESTS PASSED + 构建成功
 
 - [ ] **Step 2: 写 README(使用说明)**
 
