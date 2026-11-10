@@ -4,6 +4,8 @@ runPathUtilsTests()
 runFileWalkerTests()
 runMojibakeTests()
 runRenameTests()
+runActionPayloadTests()
+runFileOpsTests()
 
 cleanupTempDirs()
 
