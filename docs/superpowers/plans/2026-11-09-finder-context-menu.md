@@ -40,6 +40,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 11(2026-11-10,Task 9 质量评审通过,四条一行级打磨):** ① notify 换行族转义:`.components(separatedBy: .newlines).joined(separator: " ")` 替代单 `\n` 替换(补裸 CR 漏洞,覆盖 \r、\r\n、\n 及 Unicode 行分隔符);② ActionWindow.show doc 注释补「同 title 复用时忽略 width/height,尺寸以首次创建为准」(title 即去重键,Task 10-12 作者最易踩);③ locate7z 探测表补 p7zip 主二进制名 `7z`(Homebrew 与 /usr/local 各一,原表只有 7zz/7za 兼容入口);④ cutFiles 删冗余 `clearContents()`(declareTypes 自带 clear 语义;copyPath/copyName 走 setString 不带 clear,保留)。Task 6/8/9 代码块同步。
 >
 > **修订 12(2026-11-10,Task 10 执行中):** ① 唯一代码级打磨(计划原稿一行):`Task.detached` 内 `firstError` 在进 `MainActor.run` 前先落为 `let reported`,消除「并发执行代码中引用捕获 var」编译警告(Swift 6 模式下为错误);语义不变(逐项 removeItem,部分失败只报首个错误)。Task 10 代码块同步。② **窗口尺寸双口径实证**(临时 stderr 埋点 + CGWindowList,埋点测毕移除未入库):窗口 frame 自创建起恒为 **440x292** = 内容 440x260 + 标题栏实高 **32**(macOS 26 实测,前序「≈440x288 = 260+28」预估据此修正);contentView 精确 {440, 260},无留白/裁切(修订 9⑥ sizingOptions=[] 修复在新尺寸上复验,0.3s/1s/2s 三点采样无漂移)。CGWindowList 读得 432x286 系 **Liquid Glass 玻璃内缩的可视区口径**(水平 -8 / 垂直 -6),与 App 侧 frame 一致,非窗口被压。③ **同 title 复用路径实测**:换 payload(单文件→文件+目录两项)重复唤起,`show(created)` 仍仅 1 次、屏幕单窗、内容已换新——ActionWindow 去重键行为符合修订 9⑥/11② 定调;冷启动直达再复验(Task 9⑦ 先例)。④ ⚠️ UI 点击流(Toggle 勾选前「彻底删除」按钮禁用、勾选解禁、实测删除 a.txt)因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13;测试文件 `/tmp/rc-test/a.txt` 已就位保留。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
+>
+> **修订 13(2026-11-10,Task 10 质量评审通过,两条一行级打磨):** ① **done 门禁**(fix(app),全 App 唯一致命操作):「彻底删除」按钮 `.disabled(!acknowledged || working)` 补 `|| done`——done 后按 Return(defaultAction 仍绑定)会二次全量删除,已删项全部报 "No such file",错误文案误导;补门禁后完成态不可再触发。Task 10 代码块同步。② **ActionWindow @State 重置契约 doc**:show doc 注释追加「复用即整体替换 contentView → 全新 view 树,@State 天然重置,调用方无需手动清状态」(Task 11/12 作者最依赖的隐含契约,接修订 11②),Task 6 代码块同步。
 
 ---
 
@@ -1078,7 +1080,8 @@ enum ActionWindow {
         return host
     }
 
-    /// 弹出操作窗;同 title 复用时忽略 width/height,尺寸以首次创建为准(title 即去重键)
+    /// 弹出操作窗;同 title 复用时忽略 width/height,尺寸以首次创建为准(title 即去重键)。
+    /// 复用即整体替换 contentView → 全新 view 树,@State 天然重置,调用方无需手动清状态。
     @discardableResult
     static func show(title: String, width: CGFloat, height: CGFloat,
                      @ViewBuilder content: () -> some View) -> NSWindow {
@@ -1811,6 +1814,8 @@ git commit -m "feat(ext): 剪切/压缩zip/7z/授权限/唤起主 App 三动作"
 ## Task 10: 主 App · 彻底删除窗(双确认)
 
 > 本节执行说明(2026-11-10):完整实现按下方代码块落地(唯一打磨:`firstError` 落 let 再进 `MainActor.run`,见顶部修订 12①)。Step 2 冒烟:**冷启动直达**(Task 9⑦ 先例复验),窗(标题「彻底删除」)正常弹出;新建/复用两路径均实测(复用换 payload 后仍单窗、内容换新);窗口 frame 实证 440x292(内容 440x260 + 标题栏 32),CGWindowList 432x286 为 Liquid Glass 可视区内缩口径,双口径一致无压窗(修订 12②)。⚠️ 勾选确认→按钮解禁→实际删除的点击流因 CLI agent 无辅助功能权限不可自动化,标**待用户验收**(Task 13);测试文件 `/tmp/rc-test/a.txt` 已保留待验。CoreKit 零改动,34 测试全绿。
+>
+> 执行说明补记(2026-11-10,质量评审后):删除按钮加 done 门禁(完成态不可二次触发),见顶部修订 13①,代码块已同步。
 
 **Files:**
 - Modify: `App/DeleteForeverView.swift`(替换占位)
@@ -1853,7 +1858,7 @@ struct DeleteForeverView: View {
                 Button("取消") { closeWindow() }.keyboardShortcut(.cancelAction).disabled(working)
                 Button(working ? "删除中…" : "彻底删除") { delete() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!acknowledged || working)
+                    .disabled(!acknowledged || working || done)
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
             }
