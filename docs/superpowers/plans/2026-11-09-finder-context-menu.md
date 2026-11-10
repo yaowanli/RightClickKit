@@ -121,6 +121,8 @@ func cleanupTempDirs() {
 
 `CoreKit/Sources/CoreKitTestRunner/main.swift`(后续 Task 2-4 各自追加一行 `runXxxTests()`):
 ```swift
+import Foundation
+
 runPathUtilsTests()
 runFileWalkerTests()
 
