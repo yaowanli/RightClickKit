@@ -6,11 +6,19 @@ import SwiftUI
 enum ActionWindow {
     private static var alive: [String: (window: NSWindow, observer: NSObjectProtocol)] = [:]
 
+    /// macOS 26:NSHostingView 默认按 SwiftUI 理想尺寸驱动窗口,会把窗口锁到内容固有大小(如 71x48);
+    /// 关掉 sizingOptions 恢复由 contentRect 指定的窗口尺寸。新建与复用路径都必须走这里。
+    private static func makeHost<Content: View>(_ content: Content) -> NSHostingView<Content> {
+        let host = NSHostingView(rootView: content)
+        host.sizingOptions = []
+        return host
+    }
+
     @discardableResult
     static func show(title: String, width: CGFloat, height: CGFloat,
                      @ViewBuilder content: () -> some View) -> NSWindow {
         if let entry = alive[title] {
-            entry.window.contentView = NSHostingView(rootView: content())
+            entry.window.contentView = makeHost(content())
             entry.window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)
             return entry.window
@@ -20,7 +28,7 @@ enum ActionWindow {
                          backing: .buffered, defer: false)
         w.title = title
         w.isReleasedWhenClosed = false
-        w.contentView = NSHostingView(rootView: content())
+        w.contentView = makeHost(content())
         w.center()
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
