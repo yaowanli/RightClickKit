@@ -3,6 +3,7 @@ import Foundation
 runPathUtilsTests()
 runFileWalkerTests()
 runMojibakeTests()
+runRenameTests()
 
 cleanupTempDirs()
 
