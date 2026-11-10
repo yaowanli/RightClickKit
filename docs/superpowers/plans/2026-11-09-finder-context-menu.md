@@ -44,6 +44,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 13(2026-11-10,Task 10 质量评审通过,两条一行级打磨):** ① **done 门禁**(fix(app),全 App 唯一致命操作):「彻底删除」按钮 `.disabled(!acknowledged || working)` 补 `|| done`——done 后按 Return(defaultAction 仍绑定)会二次全量删除,已删项全部报 "No such file",错误文案误导;补门禁后完成态不可再触发。Task 10 代码块同步。② **ActionWindow @State 重置契约 doc**:show doc 注释追加「复用即整体替换 contentView → 全新 view 树,@State 天然重置,调用方无需手动清状态」(Task 11/12 作者最依赖的隐含契约,接修订 11②),Task 6 代码块同步。
 >
 > **修订 14(2026-11-10,Task 11 执行中):** ① apply() 沿用 Task 10 先例(修订 12①):`Task.detached` 内 `err` 进 `MainActor.run` 前落为 `let reported`(`ok` 同步落 `let okCount`),消除「并发执行代码中引用捕获 var」警告;result 文案由三元 `err!` 强解包改写为 `if let e`——语义等价(逐项 moveItem,部分失败只报首个错误),与 DeleteForeverView.swift 写法一致。Task 11 代码块同步。② **冒烟实证**:`open "rightclickkit://batch-rename?…"` **冷启动直达**(Task 9⑦/修订 12③ 先例三复验),CGWindowList 读得窗口「批量重命名」frame 精确 **560x512** = 内容 560x480 + 标题栏 32(本轮读得全 frame,未复现修订 12② Task 10 的 -8/-6 玻璃内缩读数,口径差异不影响「无压窗」结论;另一 560x592 窗为设置窗);**同 title 复用路径实测**(两项 payload → 单文件 payload 重复唤起)仍仅 1 窗不叠开,符合修订 13② @State 重置契约。③ ⚠️ 预览行内容、四规则切换预览变化、两层冲突警示文案、「应用」门禁与 moveItem 点击流因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13;`/tmp/rc-test/` 的 a.txt/b.txt 已就位保留(未被消耗)。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
+>
+> **修订 15(2026-11-10,Task 11 质量评审通过,三项打磨,前两项涉正确性/一致性):** ① **seqStart 溢出崩溃修复**(规格评审漏网的真实缺陷):起始序号输入 19 位数字时 `Int(seqStart)` 解析到 `Int.max`,plan 内部 `start + i` 溢出 trap 崩溃;修为 `min(9_999, max(0, Int(seqStart) ?? 1))`(width: 3 暗示的数量级上限)。Task 11 代码块同步。② **done 门禁**(对齐修订 13①/Task 10 先例):补 `@State private var done`,apply 收尾成功分支置 true,应用按钮 disabled 加 `|| done`——防陈旧预览上重复应用(已改名项报 "No such file",绿色「已重命名」文案误导;失败分支不置 done,保留重试路径)。③ **guard 提升**(纯清理):apply 的 `guard let dir` 提到 `Task.detached` 之前 MainActor 侧先解包(置于 `working = true` 前,dir 为 nil 时静默返回、不卡禁用态),非可选值捕获进闭包,循环内 `guard let dir else { break }` 消失。**不动的(已裁决攒到 Task 13/终审)**:失败文案绿色、ops 静默丢项警示、取消按钮/borderedProminent 一致性。
 
 ---
 
@@ -1917,6 +1919,8 @@ git commit -m "feat(app): 彻底删除窗(双确认+大小统计)"
 ## Task 11: 主 App · 批量重命名窗
 
 > 本节执行说明(2026-11-10):完整实现按下方代码块落地(apply() 按 Task 10 先例落 `let reported`/`let okCount`,见顶部修订 14①)。Step 2 冒烟:**冷启动直达**(Task 9⑦ 先例三复验),窗(标题「批量重命名」)正常弹出,frame 精确 560x512(内容 560x480 + 标题栏 32);同 title 复用路径实测仍单窗不叠开(修订 14②)。⚠️ 预览行/四规则切换/两层冲突警示/「应用」moveItem 点击流无辅助功能权限不可自动化,标**待用户验收**(Task 13);`/tmp/rc-test/` a.txt/b.txt 保留待验。CoreKit 零改动,34 测试全绿。
+>
+> 执行说明补记(2026-11-10,质量评审后):序号输入防溢出(`min(9_999, …)`)、应用按钮 done 门禁(完成态不可二次应用)、apply 的 dir 解包提升至 MainActor 侧,见顶部修订 15,代码块已同步。
 
 **Files:**
 - Modify: `App/BatchRenameView.swift`(替换占位)
@@ -1939,6 +1943,7 @@ struct BatchRenameView: View {
     @State private var find = ""
     @State private var replaceWith = ""
     @State private var working = false
+    @State private var done = false
     @State private var result: String?
 
     static func show(urls: [URL]) {
@@ -1953,7 +1958,7 @@ struct BatchRenameView: View {
         switch ruleIndex {
         case 0: return .prefix(prefix)
         case 1: return .suffix(suffix)
-        case 2: return .sequence(base: seqBase, start: max(0, Int(seqStart) ?? 1), width: 3)
+        case 2: return .sequence(base: seqBase, start: min(9_999, max(0, Int(seqStart) ?? 1)), width: 3)
         default: return .replace(find: find, replacement: replaceWith)
         }
     }
@@ -2007,21 +2012,20 @@ struct BatchRenameView: View {
             HStack {
                 Text(result ?? "").font(.caption).foregroundColor(.green)
                 Spacer()
-                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || !collisions.isEmpty || !diskConflicts.isEmpty)
+                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || done || !collisions.isEmpty || !diskConflicts.isEmpty)
             }
         }
         .padding(16).frame(width: 560, height: 480)
     }
 
     private func apply() {
+        guard let dir = urls.first?.deletingLastPathComponent() else { return }
         working = true
         let ops = planned.filter { $0.old != $0.new && !$0.new.isEmpty && !$0.new.contains("/") && !$0.new.contains(":") }
-        let dir = urls.first?.deletingLastPathComponent()
         Task.detached {
             var ok = 0
             var err: String?
             for p in ops {
-                guard let dir else { break }
                 do {
                     try FileManager.default.moveItem(
                         at: dir.appendingPathComponent(p.old),
@@ -2033,7 +2037,7 @@ struct BatchRenameView: View {
             let okCount = ok
             await MainActor.run {
                 working = false
-                if let e = reported { result = "失败:\(e)" } else { result = "已重命名 \(okCount) 项" }
+                if let e = reported { result = "失败:\(e)" } else { result = "已重命名 \(okCount) 项"; done = true }
             }
         }
     }
