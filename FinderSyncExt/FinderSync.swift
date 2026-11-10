@@ -140,7 +140,6 @@ class FinderSync: FIFinderSync {
     @objc private func cutFiles(_ sender: NSMenuItem) {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
         let pb = NSPasteboard.general
-        pb.clearContents()
         pb.declareTypes([NSPasteboard.PasteboardType("NSFilenamesPboardType"),
                          NSPasteboard.PasteboardType("com.apple.finder.cut-for-board")], owner: nil)
         pb.setPropertyList(urls.map { $0.path(percentEncoded: false) },
@@ -166,8 +165,8 @@ class FinderSync: FIFinderSync {
     }
 
     private func locate7z() -> String? {
-        ["/opt/homebrew/bin/7zz", "/opt/homebrew/bin/7za",
-         "/usr/local/bin/7zz", "/usr/local/bin/7za"]
+        ["/opt/homebrew/bin/7zz", "/opt/homebrew/bin/7z", "/opt/homebrew/bin/7za",
+         "/usr/local/bin/7zz", "/usr/local/bin/7z", "/usr/local/bin/7za"]
             .first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
@@ -240,7 +239,7 @@ class FinderSync: FIFinderSync {
         p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
         let escaped = message.replacingOccurrences(of: "\\", with: "\\\\")
             .replacingOccurrences(of: "\"", with: "\\\"")
-            .replacingOccurrences(of: "\n", with: " ") // AppleScript 字面量不允许裸换行
+            .components(separatedBy: .newlines).joined(separator: " ") // AppleScript 字面量不允许裸换行(覆盖 \r、\r\n、\n 及 Unicode 行分隔符)
         p.arguments = ["-e", "display notification \"\(escaped)\" with title \"RightClickKit\""]
         try? p.run()
     }

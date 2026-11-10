@@ -14,6 +14,7 @@ enum ActionWindow {
         return host
     }
 
+    /// 弹出操作窗;同 title 复用时忽略 width/height,尺寸以首次创建为准(title 即去重键)
     @discardableResult
     static func show(title: String, width: CGFloat, height: CGFloat,
                      @ViewBuilder content: () -> some View) -> NSWindow {
