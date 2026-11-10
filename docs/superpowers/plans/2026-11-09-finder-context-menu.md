@@ -18,6 +18,8 @@ swift --version          # 应 ≥ 5.9
 若无 CLT:`xcode-select --install`(用户手动装,弹出系统对话框)。
 
 > **⚠️ 修订(2026-11-09,执行 Task 1 时发现):** 纯 CLT **不带 XCTest 模块**(`swift test` 不可用,已实证)。经用户确认,单元测试改用**轻量测试执行器**:SPM `executableTarget` + 手写断言 harness,运行 `swift run CoreKitTestRunner`。Task 1-4 的测试代码已全部按此改写;Task 1 Step 5 的 `totalSize` 同时修复了"把目录 st_size 计入总和"的 bug。原 XCTest 版本废弃。
+>
+> **修订 2(2026-11-09,Task 1 质量评审后):** harness 改为 flag 标记失败(断言失败后该 test 显示 ❌ 而非误报 ✅),main.swift 输出 tests/assertions 计数并退出前清理临时目录;makeTree 修复(临时父目录+子目录 root,原版断言必失败)已回写至 Task 1 Step 4。
 
 ---
 
@@ -61,32 +63,43 @@ let package = Package(
 import Foundation
 
 var _failures = 0
+var _assertions = 0
+var _testsRun = 0
 var _currentTest = ""
+var _currentTestFailed = false
+var _tempDirs: [URL] = []
 
 func test(_ name: String, _ body: () throws -> Void) {
+    _testsRun += 1
     _currentTest = name
+    _currentTestFailed = false
     do {
         try body()
-        print("✅ \(name)")
     } catch {
-        print("❌ \(name): 抛错 \(error)")
+        print("  ❌ (\(name)) 抛错:\(error)")
         _failures += 1
+        _currentTestFailed = true
     }
+    print(_currentTestFailed ? "❌ \(name)" : "✅ \(name)")
 }
 
 func expectEqual<T: Equatable>(_ actual: T, _ expected: T,
                                file: StaticString = #file, line: UInt = #line) {
+    _assertions += 1
     if actual != expected {
-        print("❌ \(_currentTest)(\(file):\(line)): 期望 \(expected),实际 \(actual)")
+        print("  ❌ (\(file):\(line)): 期望 \(expected),实际 \(actual)")
         _failures += 1
+        _currentTestFailed = true
     }
 }
 
 func expectTrue(_ cond: Bool, _ label: String,
                 file: StaticString = #file, line: UInt = #line) {
+    _assertions += 1
     if !cond {
-        print("❌ \(_currentTest)(\(file):\(line)): \(label)")
+        print("  ❌ (\(file):\(line)): \(label)")
         _failures += 1
+        _currentTestFailed = true
     }
 }
 
@@ -94,7 +107,15 @@ func makeTempDir() throws -> URL {
     let dir = FileManager.default.temporaryDirectory
         .appendingPathComponent("ck-tests-\(UUID().uuidString)")
     try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    _tempDirs.append(dir)
     return dir
+}
+
+/// 退出前统一清理测试临时目录
+func cleanupTempDirs() {
+    for dir in _tempDirs {
+        try? FileManager.default.removeItem(at: dir)
+    }
 }
 ```
 
@@ -103,11 +124,13 @@ func makeTempDir() throws -> URL {
 runPathUtilsTests()
 runFileWalkerTests()
 
+cleanupTempDirs()
+
 if _failures > 0 {
-    print("FAILED:\(_failures) 个断言失败")
+    print("FAILED:\(_failures)/\(_assertions) 个断言失败")
     exit(1)
 }
-print("ALL TESTS PASSED")
+print("ALL TESTS PASSED (\(_testsRun) tests, \(_assertions) assertions)")
 ```
 
 - [ ] **Step 3: 写 PathUtils 失败测试**
@@ -161,8 +184,8 @@ func runFileWalkerTests() {
 
 /// root/  a.txt(5B)  sub/b.txt(4B)
 private func makeTree() throws -> (URL, [URL]) {
-    let root = FileManager.default.temporaryDirectory
-        .appendingPathComponent("walk-\(UUID().uuidString)")
+    let parent = try makeTempDir()
+    let root = parent.appendingPathComponent("root")
     let sub = root.appendingPathComponent("sub")
     try FileManager.default.createDirectory(at: sub, withIntermediateDirectories: true)
     let a = root.appendingPathComponent("a.txt")
