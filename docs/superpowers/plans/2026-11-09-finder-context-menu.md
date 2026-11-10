@@ -46,6 +46,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 14(2026-11-10,Task 11 执行中):** ① apply() 沿用 Task 10 先例(修订 12①):`Task.detached` 内 `err` 进 `MainActor.run` 前落为 `let reported`(`ok` 同步落 `let okCount`),消除「并发执行代码中引用捕获 var」警告;result 文案由三元 `err!` 强解包改写为 `if let e`——语义等价(逐项 moveItem,部分失败只报首个错误),与 DeleteForeverView.swift 写法一致。Task 11 代码块同步。② **冒烟实证**:`open "rightclickkit://batch-rename?…"` **冷启动直达**(Task 9⑦/修订 12③ 先例三复验),CGWindowList 读得窗口「批量重命名」frame 精确 **560x512** = 内容 560x480 + 标题栏 32(本轮读得全 frame,未复现修订 12② Task 10 的 -8/-6 玻璃内缩读数,口径差异不影响「无压窗」结论;另一 560x592 窗为设置窗);**同 title 复用路径实测**(两项 payload → 单文件 payload 重复唤起)仍仅 1 窗不叠开,符合修订 13② @State 重置契约。③ ⚠️ 预览行内容、四规则切换预览变化、两层冲突警示文案、「应用」门禁与 moveItem 点击流因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13;`/tmp/rc-test/` 的 a.txt/b.txt 已就位保留(未被消耗)。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
 >
 > **修订 15(2026-11-10,Task 11 质量评审通过,三项打磨,前两项涉正确性/一致性):** ① **seqStart 溢出崩溃修复**(规格评审漏网的真实缺陷):起始序号输入 19 位数字时 `Int(seqStart)` 解析到 `Int.max`,plan 内部 `start + i` 溢出 trap 崩溃;修为 `min(9_999, max(0, Int(seqStart) ?? 1))`(width: 3 暗示的数量级上限)。Task 11 代码块同步。② **done 门禁**(对齐修订 13①/Task 10 先例):补 `@State private var done`,apply 收尾成功分支置 true,应用按钮 disabled 加 `|| done`——防陈旧预览上重复应用(已改名项报 "No such file",绿色「已重命名」文案误导;失败分支不置 done,保留重试路径)。③ **guard 提升**(纯清理):apply 的 `guard let dir` 提到 `Task.detached` 之前 MainActor 侧先解包(置于 `working = true` 前,dir 为 nil 时静默返回、不卡禁用态),非可选值捕获进闭包,循环内 `guard let dir else { break }` 消失。**不动的(已裁决攒到 Task 13/终审)**:失败文案绿色、ops 静默丢项警示、取消按钮/borderedProminent 一致性。
+>
+> **修订 16(2026-11-10,Task 12 执行中):** ① **error/done 拆分替代 `result: String?`**(授权偏离计划原稿,直接消灭修订 15「攒到终审」清单里的「失败文案绿色」计划级瑕疵):`@State private var error: String?` + `done: Bool` + `fixedCount: Int`,失败红色 `error` 行/成功绿色「已修复 N 项。」分色显示(DeleteForeverView.swift 模式);done 门禁——成功置 done 并禁用「应用」,防陈旧行重复应用(已改名项报 "No such file");失败不置 done 保留重试路径;apply 开头 `error = nil` 清残留(对齐 DeleteForeverView `working = true; error = nil`)。Task 12 代码块同步。② **Task 10/11 先例沿用**(修订 12①/14①):`Task.detached` 内 `err` 落 `let reported`、`ok` 落 `let okCount` 再进 `MainActor.run`,文案改 `if let e`,消除并发捕获 var 警告。③ **冒烟实证**:`open "rightclickkit://fix-mojibake?…"` **冷启动直达**(Task 9⑦ 先例四复验),CGWindowList **全量口径**(`.optionAll`;本轮发现无屏幕录制权限进程上 `.optionOnScreenOnly` 探针漏报在屏窗口,后续窗口实证一律用 `.optionAll`)读得窗口「修复乱码文件名」frame 精确 **600x492** = 内容 600x460 + 标题栏 32,onscreen=true;**同 title 复用路径实测**(单路径 → 三路径 payload 重复唤起)仍单窗不叠开、frame 不变,符合修订 13② @State 重置契约。④ **测试数据就位保留**:`/tmp/rc-moji/` 三个文件——「中文」乱码(E4B8AD E69687 的 Latin-1 误读字节 `ä¸\xadæ\x96\x87.txt`)、第二乱码「数据」(E695B0 E68DAE 同形)、健康名 `正常.txt` 对照(零误报不变量)——覆盖三种行状态(多候选 Picker / 少候选 TextField / 无可识别候选),Task 13 用户验收用。⚠️ 候选渲染、Picker/TextField 交互与「应用」重命名点击流因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
 
 ---
 
@@ -2085,7 +2087,9 @@ struct MojibakeFixView: View {
     let urls: [URL]
     @State private var rows: [Row] = []
     @State private var working = false
-    @State private var result: String?
+    @State private var error: String?
+    @State private var done = false
+    @State private var fixedCount = 0
 
     static func show(urls: [URL]) {
         ActionWindow.show(title: "修复乱码文件名", width: 600, height: 460) {
@@ -2115,9 +2119,10 @@ struct MojibakeFixView: View {
                 }.padding(.vertical, 2)
             }
             HStack {
-                Text(result ?? "").font(.caption).foregroundColor(.green)
+                if let error { Text(error).font(.caption).foregroundColor(.red) }
+                if done { Text("已修复 \(fixedCount) 项。").font(.caption).foregroundColor(.green) }
                 Spacer()
-                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working)
+                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || done)
             }
         }
         .padding(16).frame(width: 600, height: 460)
@@ -2134,6 +2139,7 @@ struct MojibakeFixView: View {
 
     private func apply() {
         working = true
+        error = nil
         let ops = rows.filter {
             !$0.candidates.isEmpty && !$0.chosen.isEmpty
                 && $0.chosen != $0.url.lastPathComponent
@@ -2150,9 +2156,16 @@ struct MojibakeFixView: View {
                     ok += 1
                 } catch { err = err ?? error.localizedDescription }
             }
+            let reported = err // 落为 let 再进 MainActor.run,消除并发捕获 var 警告(Swift 6 将为错误)
+            let okCount = ok
             await MainActor.run {
                 working = false
-                result = err != nil ? "失败:\(err!)" : "已修复 \(ok) 项"
+                if let e = reported {
+                    error = e // 失败不置 done,保留重试路径
+                } else {
+                    fixedCount = okCount
+                    done = true
+                }
             }
         }
     }
@@ -2161,28 +2174,38 @@ struct MojibakeFixView: View {
 
 - [ ] **Step 2: 构造乱码实测**
 
+> 本节执行说明(2026-11-10):完整实现按上方代码块落地(唯一打磨:error/done 拆分 + `reported`/`okCount` 落 let,见顶部修订 16①②)。原稿 Step 2 的 `touch "$(…)…"` 行与 `surrogatepass` 中间变量为 shell 转义歧义下的不可靠写法,统一收敛为字节级 python 构造(下方代码块即实测可复现形态),另补第二乱码与健康名对照覆盖三种行状态。
+
 Run:
 ```bash
 ./build.sh
-mkdir -p /tmp/rc-moji
-touch "/tmp/rc-moji/$("\u{E4}\u{B8}\u{AD}\u{E6}\u{96}\u{87}".ps1)" 2>/dev/null || true
+rm -rf /tmp/rc-moji && mkdir -p /tmp/rc-moji
 python3 - <<'PY'
 import os
 base = "/tmp/rc-moji"
-name = "ä¸­æ\udc96æ\udc87.txt".encode("utf-8", "surrogatepass").decode("utf-8", "replace")
-# 直接用字节造文件名:E4B8AD E69687 的 Latin-1 误读形态
+# E4B8AD E69687("中文")的 Latin-1 误读形态字节造文件名
 raw = b"\xc3\xa4\xc2\xb8\xc2\xad\xc3\xa6\xc2\x96\xc2\x87.txt"
 with open(os.path.join(base.encode(), raw), "w") as f:
+    f.write("")
+# 第二个乱码:"数据" E695B0 E68DAE 同形;健康名对照验证零误报不变量
+raw2 = b"\xc3\xa6\xc2\x95\xc2\xb0\xc3\xa6\xc2\x8d\xc2\xae.txt"
+with open(os.path.join(base.encode(), raw2), "w") as f:
+    f.write("")
+with open(os.path.join(base, "正常.txt"), "w") as f:
     f.write("")
 PY
 ls /tmp/rc-moji
 ```
-Expected: 目录中出现形如 `ä¸­æ–‡.txt` 的乱码文件
+Expected: 目录中出现 `ä¸\xadæ\x96\x87.txt`、`æ\x95°æ\x8d®.txt` 两个乱码文件与 `正常.txt`
 
-Run: `open "rightclickkit://fix-mojibake?p=<上面乱码文件路径的 JSON 百分号编码>"`
+URL 的 payload 百分号编码(python3 `urllib.parse.quote(json.dumps(paths), safe='')`,与 CoreKit `ActionPayload.makeURL()` 同构):
+
+Run: `open "rightclickkit://fix-mojibake?p=%5B%22%2Ftmp%2Frc-moji%2F%C3%A4%C2%B8%C2%AD%C3%A6%C2%96%C2%87.txt%22%5D"`
 Expected: 窗口显示原乱码名 + 候选「中文.txt」;应用后文件被重命名
 
-(注:若构造乱码文件名步骤在 shell 中过于繁琐,可用 Swift 单测的 MojibakeFixerTests 作为算法正确性依据,本步骤只验证 UI 链路弹窗与列表渲染。)
+执行结果(2026-11-10):构建退出码 0(签名与 plist 自检全过);`swift run CoreKitTestRunner` 34 tests 全绿;三个测试文件构造成功(`ls` 实证)。`open`(单乱码路径)**冷启动直达**(Task 9⑦/修订 12③/14② 先例四复验),CGWindowList **全量口径**(`.optionAll`;实测无屏幕录制权限进程上 `.optionOnScreenOnly` 探针漏报在屏窗口,后续窗口实证一律用 `.optionAll`)读得窗口「修复乱码文件名」frame 精确 **600x492** = 内容 600x460 + 标题栏 32、onscreen=true(另一 560x592 窗为设置窗);**同 title 复用路径实测**(三路径 payload:两乱码+一健康名对照重复唤起)仍单窗不叠开、frame 不变,符合修订 13② @State 重置契约。原乱码名渲染、候选「中文.txt」显示、Picker/TextField 交互与「应用」重命名点击流为 UI 操作,无辅助功能权限不可自动化,标**待用户验收**(Task 13 清单覆盖);`/tmp/rc-moji/` 三文件保留未被消耗(乱码名未被重命名,用户可全程实操)。
+
+(注:算法正确性由 CoreKit 的 MojibakeFixerTests 作为依据,本步骤只验证 UI 链路弹窗与列表渲染。)
 
 - [ ] **Step 3: 提交**
 
@@ -2245,7 +2268,7 @@ Expected: 34 个 `✅` ALL TESTS PASSED + 构建成功
 7. 授予写入权限 → 锁定的文件解锁可写
 8. 彻底删除 → 双确认后文件消失且不在废纸篓
 9. 批量重命名 → 四种规则均生效
-10. 修复乱码 → 中文乱码被识别修复
+10. 修复乱码 → 中文乱码被识别修复(测试数据已就位:`/tmp/rc-moji/` 两个 Latin-1 形乱码文件 + 健康名 `正常.txt` 对照,健康名应显示「无可识别候选」不误报;多候选行为 Picker、少候选为 TextField,均默认「保持原样」待用户逐项确认)
 11. 设置窗口:功能开关生效(关掉某项后菜单消失)、扩展状态显示正确
 
 - [ ] **Step 4: 按验收结果修复问题并提交**
