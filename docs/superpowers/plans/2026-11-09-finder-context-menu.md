@@ -42,6 +42,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 12(2026-11-10,Task 10 执行中):** ① 唯一代码级打磨(计划原稿一行):`Task.detached` 内 `firstError` 在进 `MainActor.run` 前先落为 `let reported`,消除「并发执行代码中引用捕获 var」编译警告(Swift 6 模式下为错误);语义不变(逐项 removeItem,部分失败只报首个错误)。Task 10 代码块同步。② **窗口尺寸双口径实证**(临时 stderr 埋点 + CGWindowList,埋点测毕移除未入库):窗口 frame 自创建起恒为 **440x292** = 内容 440x260 + 标题栏实高 **32**(macOS 26 实测,前序「≈440x288 = 260+28」预估据此修正);contentView 精确 {440, 260},无留白/裁切(修订 9⑥ sizingOptions=[] 修复在新尺寸上复验,0.3s/1s/2s 三点采样无漂移)。CGWindowList 读得 432x286 系 **Liquid Glass 玻璃内缩的可视区口径**(水平 -8 / 垂直 -6),与 App 侧 frame 一致,非窗口被压。③ **同 title 复用路径实测**:换 payload(单文件→文件+目录两项)重复唤起,`show(created)` 仍仅 1 次、屏幕单窗、内容已换新——ActionWindow 去重键行为符合修订 9⑥/11② 定调;冷启动直达再复验(Task 9⑦ 先例)。④ ⚠️ UI 点击流(Toggle 勾选前「彻底删除」按钮禁用、勾选解禁、实测删除 a.txt)因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13;测试文件 `/tmp/rc-test/a.txt` 已就位保留。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
 >
 > **修订 13(2026-11-10,Task 10 质量评审通过,两条一行级打磨):** ① **done 门禁**(fix(app),全 App 唯一致命操作):「彻底删除」按钮 `.disabled(!acknowledged || working)` 补 `|| done`——done 后按 Return(defaultAction 仍绑定)会二次全量删除,已删项全部报 "No such file",错误文案误导;补门禁后完成态不可再触发。Task 10 代码块同步。② **ActionWindow @State 重置契约 doc**:show doc 注释追加「复用即整体替换 contentView → 全新 view 树,@State 天然重置,调用方无需手动清状态」(Task 11/12 作者最依赖的隐含契约,接修订 11②),Task 6 代码块同步。
+>
+> **修订 14(2026-11-10,Task 11 执行中):** ① apply() 沿用 Task 10 先例(修订 12①):`Task.detached` 内 `err` 进 `MainActor.run` 前落为 `let reported`(`ok` 同步落 `let okCount`),消除「并发执行代码中引用捕获 var」警告;result 文案由三元 `err!` 强解包改写为 `if let e`——语义等价(逐项 moveItem,部分失败只报首个错误),与 DeleteForeverView.swift 写法一致。Task 11 代码块同步。② **冒烟实证**:`open "rightclickkit://batch-rename?…"` **冷启动直达**(Task 9⑦/修订 12③ 先例三复验),CGWindowList 读得窗口「批量重命名」frame 精确 **560x512** = 内容 560x480 + 标题栏 32(本轮读得全 frame,未复现修订 12② Task 10 的 -8/-6 玻璃内缩读数,口径差异不影响「无压窗」结论;另一 560x592 窗为设置窗);**同 title 复用路径实测**(两项 payload → 单文件 payload 重复唤起)仍仅 1 窗不叠开,符合修订 13② @State 重置契约。③ ⚠️ 预览行内容、四规则切换预览变化、两层冲突警示文案、「应用」门禁与 moveItem 点击流因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13;`/tmp/rc-test/` 的 a.txt/b.txt 已就位保留(未被消耗)。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
 
 ---
 
@@ -1914,6 +1916,8 @@ git commit -m "feat(app): 彻底删除窗(双确认+大小统计)"
 
 ## Task 11: 主 App · 批量重命名窗
 
+> 本节执行说明(2026-11-10):完整实现按下方代码块落地(apply() 按 Task 10 先例落 `let reported`/`let okCount`,见顶部修订 14①)。Step 2 冒烟:**冷启动直达**(Task 9⑦ 先例三复验),窗(标题「批量重命名」)正常弹出,frame 精确 560x512(内容 560x480 + 标题栏 32);同 title 复用路径实测仍单窗不叠开(修订 14②)。⚠️ 预览行/四规则切换/两层冲突警示/「应用」moveItem 点击流无辅助功能权限不可自动化,标**待用户验收**(Task 13);`/tmp/rc-test/` a.txt/b.txt 保留待验。CoreKit 零改动,34 测试全绿。
+
 **Files:**
 - Modify: `App/BatchRenameView.swift`(替换占位)
 
@@ -2025,9 +2029,11 @@ struct BatchRenameView: View {
                     ok += 1
                 } catch { err = err ?? error.localizedDescription }
             }
+            let reported = err // 落为 let 再进 MainActor.run,消除并发捕获 var 警告(Swift 6 将为错误)
+            let okCount = ok
             await MainActor.run {
                 working = false
-                result = err != nil ? "失败:\(err!)" : "已重命名 \(ok) 项"
+                if let e = reported { result = "失败:\(e)" } else { result = "已重命名 \(okCount) 项" }
             }
         }
     }
@@ -2039,6 +2045,8 @@ struct BatchRenameView: View {
 
 Run: `./build.sh && open "rightclickkit://batch-rename?p=%5B%22%2Ftmp%2Frc-test%2Fa.txt%22%2C%22%2Ftmp%2Frc-test%2Fb.txt%22%5D"`
 Expected: 窗口列出两行预览;选「序号」规则预览变化;应用后 /tmp/rc-test 内文件名变为 文件001.txt 等
+
+执行结果(2026-11-10):构建退出码 0(签名与 plist 自检全过);`swift run CoreKitTestRunner` 34 tests 全绿;`open`(a.txt+b.txt 两项)**冷启动直达**,CGWindowList 实证窗口「批量重命名」frame 560x512(= 内容 560x480 + 标题栏 32);同 title 复用(换单文件 payload)仍单窗不叠开。两行预览/规则切换预览变化/应用后文件名变化为 UI 点击流,无辅助功能权限不可自动化,标**待用户验收**(Task 13 清单覆盖),`/tmp/rc-test/` 的 a.txt/b.txt 保留未消耗。
 
 - [ ] **Step 3: 提交**
 
