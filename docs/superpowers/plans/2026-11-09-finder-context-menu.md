@@ -30,6 +30,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 6(2026-11-10,Task 5 质量评审后):** pptx slide1 改 masterClrMapping、slideMaster1 补 sldLayoutIdLst(压低第三方导入器拒绝风险);zip 前固定时间戳 + pptx 显式条目列表(可复现构建,模板 diff 可评审);GUI 打开性验证统一留待 Task 13 验收第 1 项。
 >
 > **修订 7(2026-11-10,Task 6/7 执行中):** 实测裁决 SwiftPM 自动产出 libCoreKit.a(无需 products 声明/libtool);主 App 增加最小应用菜单修 Cmd+Q;根 .gitignore(.build/)入库。FinderSync API 以 SDK 实名为准(基类 `FIFinderSync`/枚举 `FIMenuKind`,SDK 无 `FNSyncExtension`/`FNSyncMenuKind`/`FinderSyncExtensionMain`),appex 入口用 Foundation `_NSExtensionMain`(无 main.swift,`-Xlinker -e -Xlinker _NSExtensionMain`)。⚠️ **实测 macOS 26 pkd 拒绝注册 ad-hoc 签名的 appex**:`pluginkit -a` 静默无效果、`pluginkit -m` 恒空;对照实验(同一 WPS appex:真实证书签名在 /tmp 可注册,ad-hoc 重签同标识符更高版本仍被拒)证明拦截发生在签名身份层;本机 0 个 codesigning 身份,纯 CLT(无 Xcode)无法自产 Apple Development 证书 → 「pluginkit 发现扩展」一步 BLOCKED,待用户决策(装真实签名证书,或 Task 13 验收时在系统设置「添加扩展」手动尝试);其余链路(构建/组装/双 plist lint/ad-hoc 签名/App 启动)全部实测通过。
+>
+> **修订 8(2026-11-10,Task 8 执行中,含评审确认的四项顺手修复):** ① FinderSync API 实名再裁决:`FIFinderSyncController` **无** `targetURL()`,SDK 头文件实名为 `targetedURL()`(返回 Finder 当前目标 URL——文件夹背景右键时即当前文件夹;仅在 `menu(for:)` 与其菜单 action 内有效),Task 8 代码块与 Task 7 的 copyPath 均按实名回写。② **copyPath 空选择回退**(质量评审 Important):文件夹背景右键时 `selectedItemURLs` 为空,原实现静默无效,而这恰是「拷贝当前文件夹路径」最自然手势;改为空选择回退 `targetedURL()` 拷当前文件夹路径,两者皆无才 return;同函数改用 `path(percentEncoded: false)` 消除历史百分号编码歧义(仅改动范围应用,Task 9 复制此模式,不全局翻新)。③ **build.sh 自检与签名参数化**(质量评审 Important + Minor):头部 `SIGN_IDENTITY="${SIGN_IDENTITY:--}"`(默认 ad-hoc 行为不变,为真实证书预留);签名后新增自检 `codesign --verify --deep --strict`(appex 与 $APP 各一次,对应先内后外)与两个 plist 的 `plutil -lint`(set -e 保证失败即停);末尾 `codesign -dv | head` 加 `|| true` 防 SIGPIPE;Task 7 代码块同步为最终形态。④ **ActionWindow 修复**(fix(app),原排 Task 10 前):`alive` 字典按 action(以标题为键,三个调用方标题互异)去重——同 action 重复唤起复用窗口(更新内容 + `makeKeyAndOrderFront` 置前)不叠开;willClose 时移除 observer token 修复泄漏;`show` 签名不变、调用方零改动,Task 6 代码块同步。Task 8 的 Finder UI 实测与 Task 7 同因 pluginkit BLOCKED(修订 7),标「待用户验收」。
 
 ---
 
@@ -1050,17 +1052,25 @@ final class SettingsWindow {
 }
 ```
 
-`App/ActionWindow.swift`:
+`App/ActionWindow.swift`(已回写为仓库现状:按 action 去重复用窗口置前不叠开,willClose 移除 observer 修复泄漏,见顶部修订 8④):
 ```swift
 import AppKit
 import SwiftUI
 
-/// 操作类窗口(彻底删除/批量重命名/乱码修复)的宿主,持有引用防释放
+/// 操作类窗口(彻底删除/批量重命名/乱码修复)的宿主,持有引用防释放。
+/// 按 action(以标题为键,三个调用方标题互异)去重:重复唤起复用窗口置前,不叠开。
 enum ActionWindow {
-    private static var alive: [ObjectIdentifier: NSWindow] = [:]
+    private static var alive: [String: (window: NSWindow, observer: NSObjectProtocol)] = [:]
 
+    @discardableResult
     static func show(title: String, width: CGFloat, height: CGFloat,
                      @ViewBuilder content: () -> some View) -> NSWindow {
+        if let entry = alive[title] {
+            entry.window.contentView = NSHostingView(rootView: content())
+            entry.window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return entry.window
+        }
         let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: height),
                          styleMask: [.titled, .closable],
                          backing: .buffered, defer: false)
@@ -1070,12 +1080,14 @@ enum ActionWindow {
         w.center()
         w.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
-        alive[ObjectIdentifier(w)] = w
-        NotificationCenter.default.addObserver(
+        let observer = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification, object: w, queue: .main
-        ) { [weak w] _ in
-            if let w { alive.removeValue(forKey: ObjectIdentifier(w)) }
+        ) { [weak w, title] _ in
+            guard let w, let entry = alive[title], entry.window === w else { return }
+            NotificationCenter.default.removeObserver(entry.observer)
+            alive.removeValue(forKey: title)
         }
+        alive[title] = (w, observer)
         return w
     }
 }
@@ -1322,6 +1334,8 @@ git commit -m "feat(app): 主 App 骨架、设置窗与 URL 动作分发"
 ## Task 7: Finder 扩展骨架 + build.sh(首个可安装集成里程碑)
 
 > 本节执行说明(2026-11-10):经实测裁决,`swift build -c release` 自动产出 `libCoreKit.a`(executableTarget 依赖触发静态归档),build.sh 的 swiftc 链接命令无需任何前置归档步骤;根 `.gitignore`(`.build/`)与主 App 最小应用菜单(Cmd+Q)随本任务一并入库。另两项实测裁决:① 本 SDK(macOS 26 纯 CLT)的 FinderSync 框架为经典 ObjC 接口,基类实名 `FIFinderSync`、菜单枚举实名 `FIMenuKind`,计划原稿的 `FNSyncExtension`/`FNSyncMenuKind`/`FinderSyncExtensionMain` 在 SDK 中不存在;appex 无 Swift 顶层入口,链接时用 Foundation 的 `_NSExtensionMain` 作入口(`-Xlinker -e -Xlinker _NSExtensionMain`),系统经 Info.plist `NSExtensionPrincipalClass` 实例化主类,**不需要也不存在** `FinderSyncExt/main.swift`。② ⚠️ ad-hoc 签名的 appex 无法进入 pluginkit 数据库(`pluginkit -a` 静默拒绝,`pluginkit -m` 恒空;对照组:同一 WPS appex 真实证书签名可注册、ad-hoc 重签后同标识符更高版本仍被拒;本机 `security find-identity` 为 0,纯 CLT 无 Xcode 无法自产 Apple Development 证书)——「pluginkit 发现扩展」一步 BLOCKED,待用户决策:装真实签名证书,或 Task 13 验收时在 系统设置 → 登录项与扩展 → 添加扩展 手动尝试。其余链路(构建/组装/签名/plutil/App 启动)全部验证通过。
+>
+> 执行说明补记(2026-11-10,Task 8 执行中):下方两个代码块已随修订 8 ①②③ 回写为最终形态——copyPath 空选择回退 `targetedURL()`(SDK 实名,原 `targetURL()` 不存在)+ `path(percentEncoded: false)`;build.sh `SIGN_IDENTITY` 参数化、签名/plist 自检、`codesign -dv | head` 加 `|| true`。
 
 **Files:**
 - Create: `FinderSyncExt/FinderSync.swift`
@@ -1367,10 +1381,18 @@ class FinderSync: FIFinderSync {
     }
 
     @objc private func copyPath(_ sender: NSMenuItem) {
-        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
+        // 空选择(文件夹背景右键)回退为拷贝当前文件夹路径
+        let urls = controller.selectedItemURLs() ?? []
+        let paths: [String]
+        if urls.isEmpty {
+            guard let dir = controller.targetedURL() else { return }
+            paths = [dir.path(percentEncoded: false)]
+        } else {
+            paths = urls.map { $0.path(percentEncoded: false) }
+        }
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.setString(urls.map { $0.path }.joined(separator: "\n"), forType: .string)
+        pb.setString(paths.joined(separator: "\n"), forType: .string)
     }
 }
 ```
@@ -1402,15 +1424,17 @@ class FinderSync: FIFinderSync {
 
 - [ ] **Step 2: build.sh**
 
-`build.sh`:
+`build.sh`(已回写为仓库现状:SIGN_IDENTITY 参数化 + 签名/plist 自检,见顶部修订 8③):
 ```bash
 #!/bin/bash
-# 一键构建:CoreKit(release)→ 主 App 二进制 → 扩展二进制 → 组装 bundle → ad-hoc 签名 → 注册
+# 一键构建:CoreKit(release)→ 主 App 二进制 → 扩展二进制 → 组装 bundle → 签名(默认 ad-hoc,可用 SIGN_IDENTITY 覆盖)→ 自检 → 注册
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 APP_ID="com.yaowl.RightClickKit"
 BUILD="$ROOT/.build/app"
 APP="$BUILD/RightClickKit.app"
+# 签名身份:默认 ad-hoc("-");后续换真实证书时 SIGN_IDENTITY="Apple Development: …" ./build.sh 即可
+SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 
 command -v swiftc >/dev/null || { echo "错误:未找到 swiftc,请先 xcode-select --install"; exit 1; }
 
@@ -1446,14 +1470,20 @@ cp "$ROOT/Resources/Ext-Info.plist" "$APP/Contents/PlugIns/FinderSyncExt.appex/C
 cp "$ROOT"/Resources/Templates/template.* \
    "$APP/Contents/PlugIns/FinderSyncExt.appex/Contents/Resources/"
 
-echo "==> ad-hoc 签名(先内后外)"
-codesign --force --sign - "$APP/Contents/PlugIns/FinderSyncExt.appex"
-codesign --force --sign - "$APP"
+echo "==> 签名(先内后外,身份:$SIGN_IDENTITY)"
+codesign --force --sign "$SIGN_IDENTITY" "$APP/Contents/PlugIns/FinderSyncExt.appex"
+codesign --force --sign "$SIGN_IDENTITY" "$APP"
+
+echo "==> 自检(签名与 plist,先内后外)"
+codesign --verify --deep --strict "$APP/Contents/PlugIns/FinderSyncExt.appex"
+codesign --verify --deep --strict "$APP"
+plutil -lint "$APP/Contents/Info.plist"
+plutil -lint "$APP/Contents/PlugIns/FinderSyncExt.appex/Contents/Info.plist"
 
 echo "==> 注册扩展"
 pluginkit -a "$APP" || echo "(pluginkit -a 非致命失败,可忽略,系统会自行发现)"
 
-codesign -dv "$APP" 2>&1 | head -2
+codesign -dv "$APP" 2>&1 | head -2 || true
 echo "完成:$APP"
 echo "首次使用:右键 $APP → 打开;然后到 系统设置 → 登录项与扩展 → 扩展 → Finder 扩展 勾选 RightClickKit。"
 ```
@@ -1481,6 +1511,8 @@ git commit -m "feat(ext): Finder 扩展骨架与一键构建脚本(ad-hoc 签名
 ---
 
 ## Task 8: 扩展功能批次一(新建文件/新建文件夹/拷贝名称)
+
+> 本节执行说明(2026-11-10):四个 action 与新建文件子菜单(5 项)全部实装,菜单顺序为 新建文件(子菜单)/新建文件夹/使用文件名新建文件夹/拷贝文件(夹)名称/拷贝路径(末项为 Task 7 既有)。⚠️ 计划原稿的 `controller.targetURL()` 在 SDK 中不存在,头文件实名为 `targetedURL()`(返回 Finder 当前目标 URL,文件夹背景右键时即当前文件夹;仅 `menu(for:)` 与其菜单 action 内有效),已按实名回写下方代码块(见顶部修订 8①)。Step 4 的 Finder UI 实测因「子 agent 无法操作 Finder UI + pluginkit 注册 BLOCKED(修订 7)」标**待用户验收**,留待 Task 13;其余步骤(构建/自检/冒烟/CoreKit 34 测试)已通过。
 
 **Files:**
 - Modify: `FinderSyncExt/FinderSync.swift`
@@ -1524,12 +1556,12 @@ git commit -m "feat(ext): Finder 扩展骨架与一键构建脚本(ad-hoc 签名
             action: #selector(copyName(_:)))
 ```
 
-- [ ] **Step 2: 实现三个 action(加在 FinderSync 类内)**
+- [ ] **Step 2: 实现四个 action(加在 FinderSync 类内)**
 
 ```swift
     @objc private func newTemplateFile(_ sender: NSMenuItem) {
         guard let ext = sender.representedObject as? String,
-              let dir = controller.targetURL() else { return }
+              let dir = controller.targetedURL() else { return }
         let name = PathUtils.uniqueName(in: dir, base: "未命名文件", ext: ext)
         let dst = dir.appendingPathComponent(name)
         let fm = FileManager.default
@@ -1547,7 +1579,7 @@ git commit -m "feat(ext): Finder 扩展骨架与一键构建脚本(ad-hoc 签名
     }
 
     @objc private func newFolder(_ sender: NSMenuItem) {
-        guard let dir = controller.targetURL() else { return }
+        guard let dir = controller.targetedURL() else { return }
         let name = PathUtils.uniqueName(in: dir, base: "未命名文件夹", ext: "")
         let dst = dir.appendingPathComponent(name)
         do {
