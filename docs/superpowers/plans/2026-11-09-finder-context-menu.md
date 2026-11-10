@@ -22,6 +22,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 2(2026-11-09,Task 1 质量评审后):** harness 改为 flag 标记失败(断言失败后该 test 显示 ❌ 而非误报 ✅),main.swift 输出 tests/assertions 计数并退出前清理临时目录;makeTree 修复(临时父目录+子目录 root,原版断言必失败)已回写至 Task 1 Step 4。
 >
 > **修订 3(2026-11-10,Task 2 质量评审后):** ① 候选顺序注释改为如实描述枚举序,Task 12 改为不预选候选(默认保持原样,用户逐项确认),apply 增加空名与路径分隔符防护;② 补 CP1252/MacRoman/空串用例;③ CP437(box-drawing 形)与「UTF-8 被 GBK 误读(CJK 形)」两类真实乱码刻意不支持——把 gb18030/big5 加入中间编码会击穿「健康中文名零误报」不变量,列为 v2 候选特性;④ 执行进度以会话任务清单为准,计划 checkbox 不逐一回填。
+>
+> **修订 4(2026-11-10,Task 3 质量评审后):** collisions 计入链式冲突(新名命中他人旧名,identity 对排除);plan() 注释固化三层职责(名字规划/批内冲突/批外磁盘冲突归 UI 预览);Task 11 补磁盘同名预览检查、空名与路径分隔符防护、序号起始非负;补 dotfile/多点/尾点/空查找/链式/identity 6 个钉子测试(累计 19→25,Task 4 23→29,Task 13 23→29);replace 的 NFC/NFD 字面匹配列为已知限制。
 
 ---
 
@@ -439,6 +441,31 @@ func runRenameTests() {
         let pairs: [(old: String, new: String)] = [("a", "x"), ("b", "x")]
         expectEqual(RenamePlanner.collisions(in: pairs), ["x"])
     }
+    test("冲突检测:链式改名(新名命中他人旧名)被判冲突") {
+        let r = RenamePlanner.plan(names: ["1.txt", "002.txt"],
+                                   rule: .sequence(base: "", start: 2, width: 3))
+        expectEqual(RenamePlanner.collisions(in: r), ["002.txt"])
+    }
+    test("冲突检测:identity 对不参与链式误报") {
+        let pairs: [(old: String, new: String)] = [("a", "a"), ("b", "x")]
+        expectEqual(RenamePlanner.collisions(in: pairs), [])
+    }
+    test("重命名:点开头隐藏文件按无扩展名处理") {
+        let r = RenamePlanner.plan(names: [".hidden"], rule: .prefix("v2_"))
+        expectEqual(r[0].new, "v2_.hidden")
+    }
+    test("重命名:多点文件只取最后一段扩展名") {
+        let r = RenamePlanner.plan(names: ["a.b.c"], rule: .prefix("x_"))
+        expectEqual(r[0].new, "x_a.b.c")
+    }
+    test("重命名:尾点文件名保留尾点") {
+        let r = RenamePlanner.plan(names: ["name."], rule: .prefix("v2_"))
+        expectEqual(r[0].new, "v2_name.")
+    }
+    test("重命名:空查找串为 no-op") {
+        let r = RenamePlanner.plan(names: ["abc"], rule: .replace(find: "", replacement: "-"))
+        expectEqual(r[0].new, "abc")
+    }
 }
 ```
 
@@ -463,6 +490,10 @@ public enum RenameRule {
 }
 
 public enum RenamePlanner {
+    /// 纯名字级规划:返回与输入等长且同序的 (old, new) 列表,identity 对(old==new)包含在内,
+    /// 由调用方过滤。只负责名字变换;批内重复与链式冲突用 collisions(in:) 检测,
+    /// 批外磁盘同名冲突由调用方在预览层检查(需要文件系统,这里保持纯函数)。
+    /// 已知限制:replace 为字面匹配,不处理 Unicode NFC/NFD 等价。
     public static func plan(names: [String], rule: RenameRule) -> [(old: String, new: String)] {
         names.enumerated().map { i, name in
             let ext = (name as NSString).pathExtension
@@ -481,11 +512,18 @@ public enum RenamePlanner {
         }
     }
 
-    /// 返回批次内出现 ≥2 次的新名字
+    /// 返回批次内不允许直接执行的新名:出现 ≥2 次的新名,以及链式冲突
+    /// (某项的 new 等于另一非自身项的 old,如 1.txt→002.txt 而 002.txt 也在批次内)。
+    /// identity 对(old==new)不参与链式判定。排序返回,输出确定。
     public static func collisions(in pairs: [(old: String, new: String)]) -> [String] {
-        var counts: [String: Int] = [:]
-        for p in pairs { counts[p.new, default: 0] += 1 }
-        return counts.filter { $0.value > 1 }.map { $0.key }.sorted()
+        var dupNew: [String: Int] = [:]
+        for p in pairs { dupNew[p.new, default: 0] += 1 }
+        var out = Set(dupNew.filter { $0.value > 1 }.map { $0.key })
+        let olds = Set(pairs.map { $0.old })
+        for p in pairs where p.new != p.old && olds.contains(p.new) {
+            out.insert(p.new)
+        }
+        return out.sorted()
     }
 }
 ```
@@ -493,7 +531,7 @@ public enum RenamePlanner {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner`
-Expected: 累计 19 个 `✅`,末尾 `ALL TESTS PASSED`
+Expected: 累计 25 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -718,7 +756,7 @@ public enum FileOps {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner`
-Expected: 累计 23 个 `✅`,末尾 `ALL TESTS PASSED`
+Expected: 累计 29 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -1751,7 +1789,7 @@ struct BatchRenameView: View {
         switch ruleIndex {
         case 0: return .prefix(prefix)
         case 1: return .suffix(suffix)
-        case 2: return .sequence(base: seqBase, start: Int(seqStart) ?? 1, width: 3)
+        case 2: return .sequence(base: seqBase, start: max(0, Int(seqStart) ?? 1), width: 3)
         default: return .replace(find: find, replacement: replaceWith)
         }
     }
@@ -1760,6 +1798,15 @@ struct BatchRenameView: View {
         RenamePlanner.plan(names: names, rule: rule)
     }
     private var collisions: [String] { RenamePlanner.collisions(in: planned) }
+
+    /// 批外磁盘同名冲突:新名不在本批内、但目标目录已有同名文件
+    private var diskConflicts: [String] {
+        guard let dir = urls.first?.deletingLastPathComponent() else { return [] }
+        let olds = Set(names)
+        return planned.filter { $0.old != $0.new }.map { $0.new }
+            .filter { !olds.contains($0)
+                && FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -1781,6 +1828,9 @@ struct BatchRenameView: View {
                 Label("重名冲突:\(collisions.joined(separator: "、"))", systemImage: "exclamationmark.triangle")
                     .foregroundColor(.orange).font(.caption)
             }
+            if !diskConflicts.isEmpty {
+                Label("与文件夹中已有文件重名:\(diskConflicts.joined(separator: "、"))", systemImage: "exclamationmark.triangle").foregroundColor(.orange).font(.caption)
+            }
 
             List(planned, id: \.old) { p in
                 HStack {
@@ -1793,7 +1843,7 @@ struct BatchRenameView: View {
             HStack {
                 Text(result ?? "").font(.caption).foregroundColor(.green)
                 Spacer()
-                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || !collisions.isEmpty)
+                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || !collisions.isEmpty || !diskConflicts.isEmpty)
             }
         }
         .padding(16).frame(width: 560, height: 480)
@@ -1801,7 +1851,7 @@ struct BatchRenameView: View {
 
     private func apply() {
         working = true
-        let ops = planned.filter { $0.old != $0.new }
+        let ops = planned.filter { $0.old != $0.new && !$0.new.isEmpty && !$0.new.contains("/") && !$0.new.contains(":") }
         let dir = urls.first?.deletingLastPathComponent()
         Task.detached {
             var ok = 0
@@ -1979,7 +2029,7 @@ git commit -m "feat(app): 乱码修复窗(候选预览+逐项可改)"
 - [ ] **Step 1: 全量跑一遍测试与构建**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner && cd .. && ./build.sh`
-Expected: 23 个 `✅` ALL TESTS PASSED + 构建成功
+Expected: 29 个 `✅` ALL TESTS PASSED + 构建成功
 
 - [ ] **Step 2: 写 README(使用说明)**
 
