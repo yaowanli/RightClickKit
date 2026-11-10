@@ -22,4 +22,21 @@ func runMojibakeTests() {
     test("乱码修复:含 U+FFFD 判为不可修复") {
         expectTrue(MojibakeFixer.candidates(for: "re\u{FFFD}placed.txt").isEmpty, "含替换字符应返回空")
     }
+    test("乱码修复:CP1252 误读形态(en-dash)→ 首候选中文.txt") {
+        let raw = Data("中文.txt".utf8)
+        let form = String(data: raw, encoding: .windowsCP1252)
+        expectTrue(form != nil, "CP1252 应能解码中文字节")
+        guard let form else { return }
+        expectEqual(MojibakeFixer.candidates(for: form).first ?? "", "中文.txt")
+    }
+    test("乱码修复:MacRoman 误读形态 → 候选含中文.txt") {
+        let raw = Data("中文.txt".utf8)
+        let form = String(data: raw, encoding: .macOSRoman)
+        expectTrue(form != nil, "MacRoman 应能解码任意字节")
+        guard let form else { return }
+        expectTrue(MojibakeFixer.candidates(for: form).contains("中文.txt"), "候选应含 中文.txt")
+    }
+    test("乱码修复:空串返回空") {
+        expectTrue(MojibakeFixer.candidates(for: "").isEmpty, "空串不应有候选")
+    }
 }
