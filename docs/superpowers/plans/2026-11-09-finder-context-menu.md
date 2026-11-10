@@ -47,7 +47,7 @@ swift --version          # 应 ≥ 5.9
 >
 > **修订 15(2026-11-10,Task 11 质量评审通过,三项打磨,前两项涉正确性/一致性):** ① **seqStart 溢出崩溃修复**(规格评审漏网的真实缺陷):起始序号输入 19 位数字时 `Int(seqStart)` 解析到 `Int.max`,plan 内部 `start + i` 溢出 trap 崩溃;修为 `min(9_999, max(0, Int(seqStart) ?? 1))`(width: 3 暗示的数量级上限)。Task 11 代码块同步。② **done 门禁**(对齐修订 13①/Task 10 先例):补 `@State private var done`,apply 收尾成功分支置 true,应用按钮 disabled 加 `|| done`——防陈旧预览上重复应用(已改名项报 "No such file",绿色「已重命名」文案误导;失败分支不置 done,保留重试路径)。③ **guard 提升**(纯清理):apply 的 `guard let dir` 提到 `Task.detached` 之前 MainActor 侧先解包(置于 `working = true` 前,dir 为 nil 时静默返回、不卡禁用态),非可选值捕获进闭包,循环内 `guard let dir else { break }` 消失。**不动的(已裁决攒到 Task 13/终审)**:失败文案绿色、ops 静默丢项警示、取消按钮/borderedProminent 一致性。
 >
-> **修订 16(2026-11-10,Task 12 执行中):** ① **error/done 拆分替代 `result: String?`**(授权偏离计划原稿,直接消灭修订 15「攒到终审」清单里的「失败文案绿色」计划级瑕疵):`@State private var error: String?` + `done: Bool` + `fixedCount: Int`,失败红色 `error` 行/成功绿色「已修复 N 项。」分色显示(DeleteForeverView.swift 模式);done 门禁——成功置 done 并禁用「应用」,防陈旧行重复应用(已改名项报 "No such file");失败不置 done 保留重试路径;apply 开头 `error = nil` 清残留(对齐 DeleteForeverView `working = true; error = nil`)。Task 12 代码块同步。② **Task 10/11 先例沿用**(修订 12①/14①):`Task.detached` 内 `err` 落 `let reported`、`ok` 落 `let okCount` 再进 `MainActor.run`,文案改 `if let e`,消除并发捕获 var 警告。③ **冒烟实证**:`open "rightclickkit://fix-mojibake?…"` **冷启动直达**(Task 9⑦ 先例四复验),CGWindowList **全量口径**(`.optionAll`;本轮发现无屏幕录制权限进程上 `.optionOnScreenOnly` 探针漏报在屏窗口,后续窗口实证一律用 `.optionAll`)读得窗口「修复乱码文件名」frame 精确 **600x492** = 内容 600x460 + 标题栏 32,onscreen=true;**同 title 复用路径实测**(单路径 → 三路径 payload 重复唤起)仍单窗不叠开、frame 不变,符合修订 13② @State 重置契约。④ **测试数据就位保留**:`/tmp/rc-moji/` 三个文件——「中文」乱码(E4B8AD E69687 的 Latin-1 误读字节 `ä¸\xadæ\x96\x87.txt`)、第二乱码「数据」(E695B0 E68DAE 同形)、健康名 `正常.txt` 对照(零误报不变量)——覆盖三种行状态(多候选 Picker / 少候选 TextField / 无可识别候选),Task 13 用户验收用。⚠️ 候选渲染、Picker/TextField 交互与「应用」重命名点击流因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
+> **修订 16(2026-11-10,Task 12 执行中):** ① **error/done 拆分替代 `result: String?`**(授权偏离计划原稿,直接消灭修订 15「攒到终审」清单里的「失败文案绿色」计划级瑕疵):`@State private var error: String?` + `done: Bool` + `fixedCount: Int`,失败红色 `error` 行/成功绿色「已修复 N 项。」分色显示(DeleteForeverView.swift 模式);done 门禁——成功置 done 并禁用「应用」,防陈旧行重复应用(已改名项报 "No such file");失败不置 done 保留重试路径;apply 开头 `error = nil` 清残留(对齐 DeleteForeverView `working = true; error = nil`)。Task 12 代码块同步。② **Task 10/11 先例沿用**(修订 12①/14①):`Task.detached` 内 `err` 落 `let reported`、`ok` 落 `let okCount` 再进 `MainActor.run`,文案改 `if let e`,消除并发捕获 var 警告。③ **冒烟实证**:`open "rightclickkit://fix-mojibake?…"` **冷启动直达**(Task 9⑦ 先例四复验),CGWindowList **全量口径**(`.optionAll`;本轮发现无屏幕录制权限进程上 `.optionOnScreenOnly` 探针漏报在屏窗口,后续窗口实证一律用 `.optionAll`)读得窗口「修复乱码文件名」frame 精确 **600x492** = 内容 600x460 + 标题栏 32,onscreen=true;**同 title 复用路径实测**(单路径 → 三路径 payload 重复唤起)仍单窗不叠开、frame 不变,符合修订 13② @State 重置契约。④ **测试数据就位保留**:`/tmp/rc-moji/` 四个文件——「中文」乱码(E4B8AD E69687 的 Latin-1 误读字节 `ä¸\xadæ\x96\x87.txt`)、第二乱码「数据」(E695B0 E68DAE 同形)、健康名 `正常.txt` 对照(零误报不变量)、单候选件 `À\u{0080}ab.txt`(字节 `c3 80 c2 80 ab…`,gb18030 唯一命中,big5/utf8 均败)——CoreKit 编译探针实证四种数据覆盖三态:**多候选 Picker ×2**(「中文」乱码 2 候选含「中文.txt」、「数据」乱码 2 候选含「数据.txt」)、**零候选 ×1**(健康名)、**单候选 TextField ×1**(恰 1 候选「纮ab.txt」)。规格评审修正:原「三个文件覆盖三态」表述失实——前三件全为 Picker 态或零候选,无任何一件命中 `candidates.count == 1` 的 TextField 分支(第 4 件即为此补)。Task 13 用户验收用。⚠️ 候选渲染、Picker/TextField 交互与「应用」重命名点击流因 CLI agent 无屏幕录制/辅助功能权限不可自动化,标**待用户验收**留待 Task 13。CoreKit 零改动,`swift run CoreKitTestRunner` 34 tests 全绿。
 
 ---
 
@@ -2174,7 +2174,7 @@ struct MojibakeFixView: View {
 
 - [ ] **Step 2: 构造乱码实测**
 
-> 本节执行说明(2026-11-10):完整实现按上方代码块落地(唯一打磨:error/done 拆分 + `reported`/`okCount` 落 let,见顶部修订 16①②)。原稿 Step 2 的 `touch "$(…)…"` 行与 `surrogatepass` 中间变量为 shell 转义歧义下的不可靠写法,统一收敛为字节级 python 构造(下方代码块即实测可复现形态),另补第二乱码与健康名对照覆盖三种行状态。
+> 本节执行说明(2026-11-10):完整实现按上方代码块落地(唯一打磨:error/done 拆分 + `reported`/`okCount` 落 let,见顶部修订 16①②)。原稿 Step 2 的 `touch "$(…)…"` 行与 `surrogatepass` 中间变量为 shell 转义歧义下的不可靠写法,统一收敛为字节级 python 构造(下方代码块即实测可复现形态),另补第二乱码、健康名对照与单候选件共四件覆盖三态(见顶部修订 16④)。
 
 Run:
 ```bash
@@ -2191,12 +2191,16 @@ with open(os.path.join(base.encode(), raw), "w") as f:
 raw2 = b"\xc3\xa6\xc2\x95\xc2\xb0\xc3\xa6\xc2\x8d\xc2\xae.txt"
 with open(os.path.join(base.encode(), raw2), "w") as f:
     f.write("")
+# 第 4 件:À+U+0080+ab.txt —— gb18030 唯一命中,恰 1 候选「纮ab.txt」(单候选 TextField 态)
+raw3 = b"\xc3\x80\xc2\x80ab.txt"
+with open(os.path.join(base.encode(), raw3), "w") as f:
+    f.write("")
 with open(os.path.join(base, "正常.txt"), "w") as f:
     f.write("")
 PY
 ls /tmp/rc-moji
 ```
-Expected: 目录中出现 `ä¸\xadæ\x96\x87.txt`、`æ\x95°æ\x8d®.txt` 两个乱码文件与 `正常.txt`
+Expected: 目录中出现 `ä¸\xadæ\x96\x87.txt`、`æ\x95°æ\x8d®.txt`、`À\u{0080}ab.txt`(ls 显示 `Àab.txt`,U+0080 不可见)三个乱码文件与 `正常.txt`
 
 URL 的 payload 百分号编码(python3 `urllib.parse.quote(json.dumps(paths), safe='')`,与 CoreKit `ActionPayload.makeURL()` 同构):
 
@@ -2268,7 +2272,7 @@ Expected: 34 个 `✅` ALL TESTS PASSED + 构建成功
 7. 授予写入权限 → 锁定的文件解锁可写
 8. 彻底删除 → 双确认后文件消失且不在废纸篓
 9. 批量重命名 → 四种规则均生效
-10. 修复乱码 → 中文乱码被识别修复(测试数据已就位:`/tmp/rc-moji/` 两个 Latin-1 形乱码文件 + 健康名 `正常.txt` 对照,健康名应显示「无可识别候选」不误报;多候选行为 Picker、少候选为 TextField,均默认「保持原样」待用户逐项确认)
+10. 修复乱码 → 中文乱码被识别修复(测试数据已就位:`/tmp/rc-moji/` 四件覆盖三态——两个 Latin-1 形乱码为多候选 Picker 态、健康名 `正常.txt` 零候选应显示「无可识别候选」不误报、`À\u{0080}ab.txt` 恰 1 候选「纮ab.txt」为单候选 TextField 态;均默认「保持原样」待用户逐项确认)
 11. 设置窗口:功能开关生效(关掉某项后菜单消失)、扩展状态显示正确
 
 - [ ] **Step 4: 按验收结果修复问题并提交**
