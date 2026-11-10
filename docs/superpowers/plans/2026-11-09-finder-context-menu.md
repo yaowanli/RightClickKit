@@ -28,6 +28,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 5(2026-11-10,Task 4 质量评审后):** makeWritable 返回成功计数(Int,@discardableResult),Task 9 按成功/失败分口径通知;Task 9 openInApp 检查 NSWorkspace.open 返回值(false 时提示先运行主 App);Task 6 ActionRouter 对空 paths 不弹窗;规格传参描述同步为 URL query 机制;补 IPC 特殊字符/空数组/缺 p 与移动无冲突/无扩展名冲突 5 个钉子测试(累计 29→34,Task 13 34);URL 容量实测无 64KB 限制,不加路径数上限。
 >
 > **修订 6(2026-11-10,Task 5 质量评审后):** pptx slide1 改 masterClrMapping、slideMaster1 补 sldLayoutIdLst(压低第三方导入器拒绝风险);zip 前固定时间戳 + pptx 显式条目列表(可复现构建,模板 diff 可评审);GUI 打开性验证统一留待 Task 13 验收第 1 项。
+>
+> **修订 7(2026-11-10,Task 6/7 执行中):** 实测裁决 SwiftPM 自动产出 libCoreKit.a(无需 products 声明/libtool);主 App 增加最小应用菜单修 Cmd+Q;根 .gitignore(.build/)入库。FinderSync API 以 SDK 实名为准(基类 `FIFinderSync`/枚举 `FIMenuKind`,SDK 无 `FNSyncExtension`/`FNSyncMenuKind`/`FinderSyncExtensionMain`),appex 入口用 Foundation `_NSExtensionMain`(无 main.swift,`-Xlinker -e -Xlinker _NSExtensionMain`)。⚠️ **实测 macOS 26 pkd 拒绝注册 ad-hoc 签名的 appex**:`pluginkit -a` 静默无效果、`pluginkit -m` 恒空;对照实验(同一 WPS appex:真实证书签名在 /tmp 可注册,ad-hoc 重签同标识符更高版本仍被拒)证明拦截发生在签名身份层;本机 0 个 codesigning 身份,纯 CLT(无 Xcode)无法自产 Apple Development 证书 → 「pluginkit 发现扩展」一步 BLOCKED,待用户决策(装真实签名证书,或 Task 13 验收时在系统设置「添加扩展」手动尝试);其余链路(构建/组装/双 plist lint/ad-hoc 签名/App 启动)全部实测通过。
 
 ---
 
@@ -975,13 +977,25 @@ git commit -m "feat(templates): 最小合法 docx/xlsx/pptx 空模板生成脚�
 
 - [ ] **Step 1: 程序入口(纯 AppKit,不用 storyboard/@main,便于 swiftc)**
 
-`App/main.swift`:
+`App/main.swift`(已回写为仓库现状:含最小应用菜单,修 Cmd+Q):
 ```swift
 import AppKit
 
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
+
+// 最小应用菜单:没有它,程序菜单栏为空,Cmd+Q 退出失效
+let mainMenu = NSMenu()
+let appMenuItem = NSMenuItem()
+mainMenu.addItem(appMenuItem)
+let appMenu = NSMenu()
+appMenu.addItem(NSMenuItem(title: "退出 RightClickKit",
+                           action: #selector(NSApplication.terminate(_:)),
+                           keyEquivalent: "q"))
+appMenuItem.submenu = appMenu
+app.mainMenu = mainMenu
+
 app.setActivationPolicy(.regular)
 app.run()
 ```
@@ -1307,8 +1321,9 @@ git commit -m "feat(app): 主 App 骨架、设置窗与 URL 动作分发"
 
 ## Task 7: Finder 扩展骨架 + build.sh(首个可安装集成里程碑)
 
+> 本节执行说明(2026-11-10):经实测裁决,`swift build -c release` 自动产出 `libCoreKit.a`(executableTarget 依赖触发静态归档),build.sh 的 swiftc 链接命令无需任何前置归档步骤;根 `.gitignore`(`.build/`)与主 App 最小应用菜单(Cmd+Q)随本任务一并入库。另两项实测裁决:① 本 SDK(macOS 26 纯 CLT)的 FinderSync 框架为经典 ObjC 接口,基类实名 `FIFinderSync`、菜单枚举实名 `FIMenuKind`,计划原稿的 `FNSyncExtension`/`FNSyncMenuKind`/`FinderSyncExtensionMain` 在 SDK 中不存在;appex 无 Swift 顶层入口,链接时用 Foundation 的 `_NSExtensionMain` 作入口(`-Xlinker -e -Xlinker _NSExtensionMain`),系统经 Info.plist `NSExtensionPrincipalClass` 实例化主类,**不需要也不存在** `FinderSyncExt/main.swift`。② ⚠️ ad-hoc 签名的 appex 无法进入 pluginkit 数据库(`pluginkit -a` 静默拒绝,`pluginkit -m` 恒空;对照组:同一 WPS appex 真实证书签名可注册、ad-hoc 重签后同标识符更高版本仍被拒;本机 `security find-identity` 为 0,纯 CLT 无 Xcode 无法自产 Apple Development 证书)——「pluginkit 发现扩展」一步 BLOCKED,待用户决策:装真实签名证书,或 Task 13 验收时在 系统设置 → 登录项与扩展 → 添加扩展 手动尝试。其余链路(构建/组装/签名/plutil/App 启动)全部验证通过。
+
 **Files:**
-- Create: `FinderSyncExt/main.swift`
 - Create: `FinderSyncExt/FinderSync.swift`
 - Create: `Resources/Ext-Info.plist`
 - Create: `build.sh`
@@ -1317,20 +1332,13 @@ git commit -m "feat(app): 主 App 骨架、设置窗与 URL 动作分发"
 
 - [ ] **Step 1: 扩展入口与菜单**
 
-`FinderSyncExt/main.swift`(appex 程序入口,顶层代码):
-```swift
-import FinderSync
-
-FinderSyncExtensionMain.principalClass = FinderSync.self
-```
-
-`FinderSyncExt/FinderSync.swift`:
+`FinderSyncExt/FinderSync.swift`(已回写为仓库现状,API 用 SDK 实名):
 ```swift
 import FinderSync
 import AppKit
 import CoreKit
 
-class FinderSync: FNSyncExtension {
+class FinderSync: FIFinderSync {
     private let controller = FIFinderSyncController.default()
 
     override init() {
@@ -1339,7 +1347,7 @@ class FinderSync: FNSyncExtension {
         controller.directoryURLs.insert(URL(fileURLWithPath: "/"))
     }
 
-    override func menu(for menuKind: FNSyncMenuKind) -> NSMenu {
+    override func menu(for menuKind: FIMenuKind) -> NSMenu {
         let menu = NSMenu(title: "RightClickKit")
         add(to: menu, "拷贝路径", symbol: "link", feature: .copyPath,
             action: #selector(copyPath(_:)))
@@ -1423,10 +1431,13 @@ swiftc -O \
   -o "$APP/Contents/MacOS/RightClickKit"
 
 echo "==> 编译 Finder 扩展"
+# appex 无 main.swift,入口用 Foundation 的 _NSExtensionMain(系统经 Info.plist
+# NSExtensionPrincipalClass 实例化扩展主类,与 Xcode 的 appex 链接方式一致)
 swiftc -O -module-name FinderSyncExt \
   -I "$ROOT/CoreKit/.build/release/Modules" \
   -L "$ROOT/CoreKit/.build/release" -lCoreKit \
   "$ROOT"/FinderSyncExt/*.swift \
+  -Xlinker -e -Xlinker _NSExtensionMain \
   -o "$APP/Contents/PlugIns/FinderSyncExt.appex/Contents/MacOS/FinderSyncExt"
 
 echo "==> 写入 plist 与模板资源"
