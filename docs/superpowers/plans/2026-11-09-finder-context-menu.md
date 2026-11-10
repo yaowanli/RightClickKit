@@ -26,6 +26,8 @@ swift --version          # 应 ≥ 5.9
 > **修订 4(2026-11-10,Task 3 质量评审后):** collisions 计入链式冲突(新名命中他人旧名,identity 对排除);plan() 注释固化三层职责(名字规划/批内冲突/批外磁盘冲突归 UI 预览);Task 11 补磁盘同名预览检查、空名与路径分隔符防护、序号起始非负;补 dotfile/多点/尾点/空查找/链式/identity 6 个钉子测试(累计 19→25,Task 4 23→29,Task 13 23→29);replace 的 NFC/NFD 字面匹配列为已知限制。
 >
 > **修订 5(2026-11-10,Task 4 质量评审后):** makeWritable 返回成功计数(Int,@discardableResult),Task 9 按成功/失败分口径通知;Task 9 openInApp 检查 NSWorkspace.open 返回值(false 时提示先运行主 App);Task 6 ActionRouter 对空 paths 不弹窗;规格传参描述同步为 URL query 机制;补 IPC 特殊字符/空数组/缺 p 与移动无冲突/无扩展名冲突 5 个钉子测试(累计 29→34,Task 13 34);URL 容量实测无 64KB 限制,不加路径数上限。
+>
+> **修订 6(2026-11-10,Task 5 质量评审后):** pptx slide1 改 masterClrMapping、slideMaster1 补 sldLayoutIdLst(压低第三方导入器拒绝风险);zip 前固定时间戳 + pptx 显式条目列表(可复现构建,模板 diff 可评审);GUI 打开性验证统一留待 Task 13 验收第 1 项。
 
 ---
 
@@ -832,14 +834,16 @@ git commit -m "feat(core): URL 传参、功能开关、安全移动与授权限"
 ```bash
 #!/bin/bash
 # 生成最小合法的 docx/xlsx/pptx 空模板(纯 XML + zip,无需 Xcode)
+# 模板 GUI 打开性验证(Word/Pages/WPS/Keynote)统一留待 Task 13 验收第 1 项
 set -euo pipefail
 OUT="$(cd "$(dirname "$0")/.." && pwd)/Resources/Templates"
 mkdir -p "$OUT"
+rm -f "$OUT/template.docx" "$OUT/template.xlsx" "$OUT/template.pptx"
 WORK=$(mktemp -d)
 trap 'rm -rf "$WORK"' EXIT
 
 make_docx() {
-  local d="$WORK/docx"; mkdir -p "$d/_rels" "$d/word/_rels"
+  local d="$WORK/docx"; mkdir -p "$d/_rels" "$d/word"
   cat > "$d/[Content_Types].xml" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>
@@ -852,7 +856,8 @@ X
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p/></w:body></w:document>
 X
-  (cd "$d" && zip -q -X "$OUT/template.docx" "[Content_Types].xml" "_rels/.rels" "word/document.xml")
+  find "$d" -exec touch -t 202601010000 {} +
+  (cd "$d" && TZ=UTC zip -q -X "$OUT/template.docx" "[Content_Types].xml" "_rels/.rels" "word/document.xml")
 }
 
 make_xlsx() {
@@ -877,7 +882,8 @@ X
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData/></x:worksheet>
 X
-  (cd "$d" && zip -q -X "$OUT/template.xlsx" "[Content_Types].xml" "_rels/.rels" "xl/_rels/workbook.xml.rels" "xl/workbook.xml" "xl/worksheets/sheet1.xml")
+  find "$d" -exec touch -t 202601010000 {} +
+  (cd "$d" && TZ=UTC zip -q -X "$OUT/template.xlsx" "[Content_Types].xml" "_rels/.rels" "xl/_rels/workbook.xml.rels" "xl/workbook.xml" "xl/worksheets/sheet1.xml")
 }
 
 make_pptx() {
@@ -901,7 +907,7 @@ X
 X
   cat > "$d/ppt/slides/slide1.xml" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sld>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>
 X
   cat > "$d/ppt/slides/_rels/slide1.xml.rels" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -917,7 +923,7 @@ X
 X
   cat > "$d/ppt/slideMasters/slideMaster1.xml" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:sldMaster>
+<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>
 X
   cat > "$d/ppt/slideMasters/_rels/slideMaster1.xml.rels" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -927,7 +933,8 @@ X
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2><a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>
 X
-  (cd "$d" && zip -q -r -X "$OUT/template.pptx" .)
+  find "$d" -exec touch -t 202601010000 {} +
+  (cd "$d" && TZ=UTC zip -q -X "$OUT/template.pptx" "[Content_Types].xml" "_rels/.rels" "ppt/_rels/presentation.xml.rels" "ppt/presentation.xml" "ppt/slides/_rels/slide1.xml.rels" "ppt/slides/slide1.xml" "ppt/slideLayouts/_rels/slideLayout1.xml.rels" "ppt/slideLayouts/slideLayout1.xml" "ppt/slideMasters/_rels/slideMaster1.xml.rels" "ppt/slideMasters/slideMaster1.xml" "ppt/theme/theme1.xml")
 }
 
 make_docx
