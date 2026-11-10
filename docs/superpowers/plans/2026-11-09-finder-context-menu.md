@@ -20,6 +20,8 @@ swift --version          # 应 ≥ 5.9
 > **⚠️ 修订(2026-11-09,执行 Task 1 时发现):** 纯 CLT **不带 XCTest 模块**(`swift test` 不可用,已实证)。经用户确认,单元测试改用**轻量测试执行器**:SPM `executableTarget` + 手写断言 harness,运行 `swift run CoreKitTestRunner`。Task 1-4 的测试代码已全部按此改写;Task 1 Step 5 的 `totalSize` 同时修复了"把目录 st_size 计入总和"的 bug。原 XCTest 版本废弃。
 >
 > **修订 2(2026-11-09,Task 1 质量评审后):** harness 改为 flag 标记失败(断言失败后该 test 显示 ❌ 而非误报 ✅),main.swift 输出 tests/assertions 计数并退出前清理临时目录;makeTree 修复(临时父目录+子目录 root,原版断言必失败)已回写至 Task 1 Step 4。
+>
+> **修订 3(2026-11-09,Task 2 质量评审后):** ① 候选顺序注释改为如实描述枚举序,Task 12 改为不预选候选(默认保持原样,用户逐项确认),apply 增加空名与路径分隔符防护;② 补 CP1252/MacRoman/空串用例;③ CP437(box-drawing 形)与「UTF-8 被 GBK 误读(CJK 形)」两类真实乱码刻意不支持——把 gb18030/big5 加入中间编码会击穿「健康中文名零误报」不变量,列为 v2 候选特性;④ 执行进度以会话任务清单为准,计划 checkbox 不逐一回填。
 
 ---
 
@@ -129,7 +131,7 @@ runFileWalkerTests()
 cleanupTempDirs()
 
 if _failures > 0 {
-    print("FAILED:\(_failures)/\(_assertions) 个断言失败")
+    print("FAILED:\(_failures) failures (\(_assertions) assertions run)")
     exit(1)
 }
 print("ALL TESTS PASSED (\(_testsRun) tests, \(_assertions) assertions)")
@@ -309,6 +311,23 @@ func runMojibakeTests() {
     test("乱码修复:含 U+FFFD 判为不可修复") {
         expectTrue(MojibakeFixer.candidates(for: "re\u{FFFD}placed.txt").isEmpty, "含替换字符应返回空")
     }
+    test("乱码修复:CP1252 误读形态(en-dash)→ 首候选中文.txt") {
+        let raw = Data("中文.txt".utf8)
+        let form = String(data: raw, encoding: .windowsCP1252)
+        expectTrue(form != nil, "CP1252 应能解码中文字节")
+        guard let form else { return }
+        expectEqual(MojibakeFixer.candidates(for: form).first ?? "", "中文.txt")
+    }
+    test("乱码修复:MacRoman 误读形态 → 候选含中文.txt") {
+        let raw = Data("中文.txt".utf8)
+        let form = String(data: raw, encoding: .macOSRoman)
+        expectTrue(form != nil, "MacRoman 应能解码任意字节")
+        guard let form else { return }
+        expectTrue(MojibakeFixer.candidates(for: form).contains("中文.txt"), "候选应含 中文.txt")
+    }
+    test("乱码修复:空串返回空") {
+        expectTrue(MojibakeFixer.candidates(for: "").isEmpty, "空串不应有候选")
+    }
 }
 ```
 
@@ -339,7 +358,9 @@ public enum MojibakeFixer {
     private static let intermediates: [String.Encoding] = [.isoLatin1, .windowsCP1252, .macOSRoman]
     private static let targets: [String.Encoding] = [.utf8, gb18030, big5]
 
-    /// 返回按置信度排序的去重候选;不可修复或无候选时返回 []
+    /// 返回去重后的修复候选;顺序为枚举序(单字节中间编码在前、.utf8 目标在前),
+    /// 不是严格置信度排序——首个候选不一定正确,UI 不得预选,须由用户确认。
+    /// 不可修复或无候选时返回 []
     public static func candidates(for name: String) -> [String] {
         guard !name.contains("\u{FFFD}") else { return [] }
         var seen: Set<String> = [name]
@@ -355,7 +376,7 @@ public enum MojibakeFixer {
         return out
     }
 
-    public static func looksCJK(_ s: String) -> Bool {
+    private static func looksCJK(_ s: String) -> Bool {
         s.unicodeScalars.contains {
             (0x4E00...0x9FFF).contains($0.value) || (0x3400...0x4DBF).contains($0.value)
         }
@@ -366,7 +387,7 @@ public enum MojibakeFixer {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner`
-Expected: 累计 10 个 `✅`,末尾 `ALL TESTS PASSED`
+Expected: 累计 13 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -472,7 +493,7 @@ public enum RenamePlanner {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner`
-Expected: 累计 16 个 `✅`,末尾 `ALL TESTS PASSED`
+Expected: 累计 19 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -697,7 +718,7 @@ public enum FileOps {
 - [ ] **Step 4: 跑测试确认通过**
 
 Run: `cd CoreKit && swift run CoreKitTestRunner`
-Expected: 累计 20 个 `✅`,末尾 `ALL TESTS PASSED`
+Expected: 累计 23 个 `✅`,末尾 `ALL TESTS PASSED`
 
 - [ ] **Step 5: 提交**
 
@@ -1861,9 +1882,11 @@ struct MojibakeFixView: View {
                     if row.candidates.isEmpty {
                         Text("无可识别候选").font(.system(size: 12)).foregroundColor(.orange)
                     } else if row.candidates.count == 1 {
+                        // 默认空=保持原样,用户手动填
                         TextField("新文件名", text: $row.chosen).font(.system(size: 12))
                     } else {
                         Picker("", selection: $row.chosen) {
+                            Text("保持原样").tag("")
                             ForEach(row.candidates, id: \.self) { Text($0).tag($0) }
                         }.labelsHidden().font(.system(size: 12))
                     }
@@ -1882,14 +1905,18 @@ struct MojibakeFixView: View {
     private func buildRows() {
         rows = urls.map { url in
             let cands = MojibakeFixer.candidates(for: url.lastPathComponent)
-            return Row(url: url, candidates: cands, chosen: cands.first ?? "")
+            // 不预选候选:默认保持原样,须由用户逐项确认(候选顺序非置信度序)
+            return Row(url: url, candidates: cands, chosen: "")
         }
     }
 
     private func apply() {
         working = true
-        let ops = rows.filter { !$0.candidates.isEmpty && $0.chosen != $0.url.lastPathComponent }
-            .map { ($0.url, $0.chosen) }
+        let ops = rows.filter {
+            !$0.candidates.isEmpty && !$0.chosen.isEmpty
+                && $0.chosen != $0.url.lastPathComponent
+                && !$0.chosen.contains("/") && !$0.chosen.contains(":")
+        }.map { ($0.url, $0.chosen) }
         Task.detached {
             var ok = 0
             var err: String?
