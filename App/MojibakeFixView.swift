@@ -25,7 +25,7 @@ struct MojibakeFixView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            if rows.isEmpty && !working {
+            if !rows.isEmpty && rows.allSatisfy({ $0.candidates.isEmpty }) {
                 Text("未检测到可修复的编码。").foregroundColor(.secondary)
             }
             List($rows) { $row in
@@ -34,8 +34,8 @@ struct MojibakeFixView: View {
                     if row.candidates.isEmpty {
                         Text("无可识别候选").font(.system(size: 12)).foregroundColor(.orange)
                     } else if row.candidates.count == 1 {
-                        // 默认空=保持原样,用户手动填
-                        TextField("新文件名", text: $row.chosen).font(.system(size: 12))
+                        // placeholder 显示候选值本身;默认空=保持原样
+                        TextField(row.candidates[0], text: $row.chosen).font(.system(size: 12))
                     } else {
                         Picker("", selection: $row.chosen) {
                             Text("保持原样").tag("")
@@ -48,7 +48,11 @@ struct MojibakeFixView: View {
                 if let error { Text(error).font(.caption).foregroundColor(.red) }
                 if done { Text("已修复 \(fixedCount) 项。").font(.caption).foregroundColor(.green) }
                 Spacer()
-                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || done)
+                Button("取消") { closeWindow() }.keyboardShortcut(.cancelAction).disabled(working)
+                Button(working ? "修复中…" : "应用") { apply() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(working || done)
+                    .buttonStyle(.borderedProminent)
             }
         }
         .padding(16).frame(width: 600, height: 460)
@@ -64,13 +68,16 @@ struct MojibakeFixView: View {
     }
 
     private func apply() {
+        let ops = rows.compactMap { row -> (URL, String)? in
+            let chosen = row.chosen.trimmingCharacters(in: .whitespaces) // trim 后为空视为「保持原样」
+            guard !row.candidates.isEmpty, !chosen.isEmpty,
+                  chosen != row.url.lastPathComponent,
+                  !chosen.contains("/"), !chosen.contains(":") else { return nil }
+            return (row.url, chosen)
+        }
+        guard !ops.isEmpty else { return } // 零操作(全部保持原样)静默 no-op,不置 done 锁窗
         working = true
         error = nil
-        let ops = rows.filter {
-            !$0.candidates.isEmpty && !$0.chosen.isEmpty
-                && $0.chosen != $0.url.lastPathComponent
-                && !$0.chosen.contains("/") && !$0.chosen.contains(":")
-        }.map { ($0.url, $0.chosen) }
         Task.detached {
             var ok = 0
             var err: String?
@@ -95,4 +102,5 @@ struct MojibakeFixView: View {
             }
         }
     }
+    private func closeWindow() { NSApp.keyWindow?.close() }
 }

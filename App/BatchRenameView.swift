@@ -13,7 +13,8 @@ struct BatchRenameView: View {
     @State private var replaceWith = ""
     @State private var working = false
     @State private var done = false
-    @State private var result: String?
+    @State private var error: String?
+    @State private var renamedCount = 0
 
     static func show(urls: [URL]) {
         ActionWindow.show(title: "批量重命名", width: 560, height: 480) {
@@ -46,6 +47,17 @@ struct BatchRenameView: View {
                 && FileManager.default.fileExists(atPath: dir.appendingPathComponent($0).path) }
     }
 
+    /// 新名可执行判定:非空且不含路径分隔符(apply 的 ops 过滤与丢项警示共用,防双写漂移)
+    private func isValidNewName(_ new: String) -> Bool {
+        !new.isEmpty && !new.contains("/") && !new.contains(":")
+    }
+
+    /// ops 过滤静默丢弃数:有意改名(old != new)但新名不可执行的项
+    private var droppedOpsCount: Int {
+        let changed = planned.filter { $0.old != $0.new }
+        return changed.count - changed.filter { isValidNewName($0.new) }.count
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Picker("规则", selection: $ruleIndex) {
@@ -69,6 +81,10 @@ struct BatchRenameView: View {
             if !diskConflicts.isEmpty {
                 Label("与文件夹中已有文件重名:\(diskConflicts.joined(separator: "、"))", systemImage: "exclamationmark.triangle").foregroundColor(.orange).font(.caption)
             }
+            if droppedOpsCount > 0 {
+                Label("\(droppedOpsCount) 项新名为空或含路径分隔符,已跳过", systemImage: "exclamationmark.triangle")
+                    .foregroundColor(.orange).font(.caption)
+            }
 
             List(planned, id: \.old) { p in
                 HStack {
@@ -79,9 +95,14 @@ struct BatchRenameView: View {
             }
 
             HStack {
-                Text(result ?? "").font(.caption).foregroundColor(.green)
+                if let error { Text(error).font(.caption).foregroundColor(.red) }
+                if done { Text("已重命名 \(renamedCount) 项。").font(.caption).foregroundColor(.green) }
                 Spacer()
-                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || done || !collisions.isEmpty || !diskConflicts.isEmpty)
+                Button("取消") { closeWindow() }.keyboardShortcut(.cancelAction).disabled(working)
+                Button(working ? "重命名中…" : "应用") { apply() }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(working || done || !collisions.isEmpty || !diskConflicts.isEmpty)
+                    .buttonStyle(.borderedProminent)
             }
         }
         .padding(16).frame(width: 560, height: 480)
@@ -89,8 +110,10 @@ struct BatchRenameView: View {
 
     private func apply() {
         guard let dir = urls.first?.deletingLastPathComponent() else { return }
+        let ops = planned.filter { $0.old != $0.new && isValidNewName($0.new) }
+        guard !ops.isEmpty else { return } // 零操作(全部保持原样/无变化)静默 no-op,不置 done 锁窗
         working = true
-        let ops = planned.filter { $0.old != $0.new && !$0.new.isEmpty && !$0.new.contains("/") && !$0.new.contains(":") }
+        error = nil
         Task.detached {
             var ok = 0
             var err: String?
@@ -106,8 +129,14 @@ struct BatchRenameView: View {
             let okCount = ok
             await MainActor.run {
                 working = false
-                if let e = reported { result = "失败:\(e)" } else { result = "已重命名 \(okCount) 项"; done = true }
+                if let e = reported {
+                    error = e // 失败不置 done,保留重试路径
+                } else {
+                    renamedCount = okCount
+                    done = true
+                }
             }
         }
     }
+    private func closeWindow() { NSApp.keyWindow?.close() }
 }
