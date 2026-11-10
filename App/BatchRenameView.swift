@@ -12,6 +12,7 @@ struct BatchRenameView: View {
     @State private var find = ""
     @State private var replaceWith = ""
     @State private var working = false
+    @State private var done = false
     @State private var result: String?
 
     static func show(urls: [URL]) {
@@ -26,7 +27,7 @@ struct BatchRenameView: View {
         switch ruleIndex {
         case 0: return .prefix(prefix)
         case 1: return .suffix(suffix)
-        case 2: return .sequence(base: seqBase, start: max(0, Int(seqStart) ?? 1), width: 3)
+        case 2: return .sequence(base: seqBase, start: min(9_999, max(0, Int(seqStart) ?? 1)), width: 3)
         default: return .replace(find: find, replacement: replaceWith)
         }
     }
@@ -80,21 +81,20 @@ struct BatchRenameView: View {
             HStack {
                 Text(result ?? "").font(.caption).foregroundColor(.green)
                 Spacer()
-                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || !collisions.isEmpty || !diskConflicts.isEmpty)
+                Button("应用") { apply() }.keyboardShortcut(.defaultAction).disabled(working || done || !collisions.isEmpty || !diskConflicts.isEmpty)
             }
         }
         .padding(16).frame(width: 560, height: 480)
     }
 
     private func apply() {
+        guard let dir = urls.first?.deletingLastPathComponent() else { return }
         working = true
         let ops = planned.filter { $0.old != $0.new && !$0.new.isEmpty && !$0.new.contains("/") && !$0.new.contains(":") }
-        let dir = urls.first?.deletingLastPathComponent()
         Task.detached {
             var ok = 0
             var err: String?
             for p in ops {
-                guard let dir else { break }
                 do {
                     try FileManager.default.moveItem(
                         at: dir.appendingPathComponent(p.old),
@@ -106,7 +106,7 @@ struct BatchRenameView: View {
             let okCount = ok
             await MainActor.run {
                 working = false
-                if let e = reported { result = "失败:\(e)" } else { result = "已重命名 \(okCount) 项" }
+                if let e = reported { result = "失败:\(e)" } else { result = "已重命名 \(okCount) 项"; done = true }
             }
         }
     }
