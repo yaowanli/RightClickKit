@@ -179,7 +179,8 @@ class FinderSync: FIFinderSync {
         let dir = first.deletingLastPathComponent()
         let out = dir.appendingPathComponent(
             PathUtils.uniqueName(in: dir, base: baseName(first), ext: "7z"))
-        // cwd 设为目标目录、参数用 lastPathComponent 相对路径,规避 7z 对含空格/特殊字符绝对路径的解析问题
+        // cwd 设为首项目录、参数用 lastPathComponent 相对路径(Process 直传 argv 无 shell 切分问题);
+        // 已知限制:多选跨目录时相对 cwd 仅对首项目录有效,Task 13 验收按同目录口径
         guard let status = runTool(
             executable: seven,
             arguments: ["a", "-bd", out.path] + urls.map { $0.lastPathComponent },
@@ -192,8 +193,10 @@ class FinderSync: FIFinderSync {
 
     @objc private func grantWrite(_ sender: NSMenuItem) {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
+        // 顶层条目粒度计数:makeWritable 返回的是节点数(文件夹计入全部后代),
+        // 直接累加会与 urls.count 口径错位,文件夹全成功也会误报「部分失败」
         var ok = 0
-        for url in urls { ok += FileOps.makeWritable(url) }
+        for url in urls where FileOps.makeWritable(url) > 0 { ok += 1 }
         let tried = urls.count
         if ok == tried {
             notify("已授予写入权限(\(tried) 项)")
