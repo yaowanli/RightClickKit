@@ -2,11 +2,12 @@ import Foundation
 
 runPathUtilsTests()
 runFileWalkerTests()
+runMojibakeTests()
 
 cleanupTempDirs()
 
 if _failures > 0 {
-    print("FAILED:\(_failures)/\(_assertions) 个断言失败")
+    print("FAILED:\(_failures) failures (\(_assertions) assertions run)")
     exit(1)
 }
 print("ALL TESTS PASSED (\(_testsRun) tests, \(_assertions) assertions)")
