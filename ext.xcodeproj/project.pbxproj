@@ -1,0 +1,229 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		BB0000000000000000000001 /* FinderSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000011; };
+		BB0000000000000000000002 /* ActionPayload.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000012; };
+		BB0000000000000000000003 /* FeatureStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000013; };
+		BB0000000000000000000004 /* FileOps.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000014; };
+		BB0000000000000000000005 /* FileWalker.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000015; };
+		BB0000000000000000000006 /* MojibakeFixer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000016; };
+		BB0000000000000000000007 /* PathUtils.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000017; };
+		BB0000000000000000000008 /* RenameRules.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000018; };
+		BB0000000000000000000009 /* template.docx in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000025; };
+		BB000000000000000000000A /* template.pptx in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000026; };
+		BB000000000000000000000B /* template.xlsx in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000027; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		BB0000000000000000000011 /* FinderSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderSync.swift; sourceTree = "<group>"; };
+		BB0000000000000000000012 /* ActionPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ActionPayload.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/ActionPayload.swift"; sourceTree = "<absolute>"; };
+		BB0000000000000000000013 /* FeatureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FeatureStore.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/FeatureStore.swift"; sourceTree = "<absolute>"; };
+		BB0000000000000000000014 /* FileOps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FileOps.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/FileOps.swift"; sourceTree = "<absolute>"; };
+		BB0000000000000000000015 /* FileWalker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FileWalker.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/FileWalker.swift"; sourceTree = "<absolute>"; };
+		BB0000000000000000000016 /* MojibakeFixer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MojibakeFixer.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/MojibakeFixer.swift"; sourceTree = "<absolute>"; };
+		BB0000000000000000000017 /* PathUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PathUtils.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/PathUtils.swift"; sourceTree = "<absolute>"; };
+		BB0000000000000000000018 /* RenameRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenameRules.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/RenameRules.swift"; sourceTree = "<absolute>"; };
+		BB0000000000000000000019 /* FinderSyncExt.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinderSyncExt.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000020 /* Ext-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Ext-Info.plist"; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext-Info.plist"; sourceTree = "<absolute>"; };
+		BB0000000000000000000021 /* Ext.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "Ext.entitlements"; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext.entitlements"; sourceTree = "<absolute>"; };
+		BB0000000000000000000025 /* template.docx */ = {isa = PBXFileReference; lastKnownFileType = file; name = template.docx; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Templates/template.docx"; sourceTree = "<absolute>"; };
+		BB0000000000000000000026 /* template.pptx */ = {isa = PBXFileReference; lastKnownFileType = file; name = template.pptx; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Templates/template.pptx"; sourceTree = "<absolute>"; };
+		BB0000000000000000000027 /* template.xlsx */ = {isa = PBXFileReference; lastKnownFileType = file; name = template.xlsx; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Templates/template.xlsx"; sourceTree = "<absolute>"; };
+		BB0000000000000000000022 /* FinderSyncExt */ = {isa = PBXGroup; children = (
+			BB0000000000000000000011 /* FinderSync.swift */,
+		); path = "/Users/yaowl/orca/projects/mac-右键快捷键/FinderSyncExt"; sourceTree = "<absolute>"; };
+		BB0000000000000000000023 /* Products */ = {isa = PBXGroup; children = (
+			BB0000000000000000000019 /* FinderSyncExt.appex */,
+		); name = Products; sourceTree = "<group>"; };
+		BB0000000000000000000024 /* main group */ = {isa = PBXGroup; children = (
+			BB0000000000000000000022 /* FinderSyncExt */,
+			BB0000000000000000000020 /* Ext-Info.plist */,
+			BB0000000000000000000021 /* Ext.entitlements */,
+			BB0000000000000000000023 /* Products */,
+		); sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		BB0000000000000000000031 /* Frameworks */ = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXNativeTarget section */
+		BB0000000000000000000040 /* FinderSyncExt */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000000050 /* Build configuration list for PBXNativeTarget "FinderSyncExt" */;
+			buildPhases = (
+				BB0000000000000000000031 /* Frameworks */,
+				BB0000000000000000000032 /* Sources */,
+				BB0000000000000000000033 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = FinderSyncExt;
+			productName = FinderSyncExt;
+			productReference = BB0000000000000000000019 /* FinderSyncExt.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		BB0000000000000000000000 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1600;
+				LastUpgradeCheck = 1600;
+				TargetAttributes = {
+					BB0000000000000000000040 = {
+						CreatedOnToolsVersion = 16.0;
+					};
+				};
+			};
+			buildConfigurationList = BB0000000000000000000051 /* Build configuration list for PBXProject "ExtBuild" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = BB0000000000000000000024;
+			productRefGroup = BB0000000000000000000023 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				BB0000000000000000000040 /* FinderSyncExt */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		BB0000000000000000000033 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000009 /* template.docx in Resources */,
+				BB000000000000000000000A /* template.pptx in Resources */,
+				BB000000000000000000000B /* template.xlsx in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		BB0000000000000000000032 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				BB0000000000000000000001 /* FinderSync.swift in Sources */,
+				BB0000000000000000000002 /* ActionPayload.swift in Sources */,
+				BB0000000000000000000003 /* FeatureStore.swift in Sources */,
+				BB0000000000000000000004 /* FileOps.swift in Sources */,
+				BB0000000000000000000005 /* FileWalker.swift in Sources */,
+				BB0000000000000000000006 /* MojibakeFixer.swift in Sources */,
+				BB0000000000000000000007 /* PathUtils.swift in Sources */,
+				BB0000000000000000000008 /* RenameRules.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		BB0000000000000000000060 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = GH82DCSZ6A;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BB0000000000000000000061 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_STYLE = Automatic;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = GH82DCSZ6A;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		BB0000000000000000000062 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = GH82DCSZ6A;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yaowl.RightClickKit.FinderSyncExt;
+				PRODUCT_NAME = FinderSyncExt;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = COREKIT_IN_TARGET;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		BB0000000000000000000063 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				DEVELOPMENT_TEAM = GH82DCSZ6A;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext-Info.plist";
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.yaowl.RightClickKit.FinderSyncExt;
+				PRODUCT_NAME = FinderSyncExt;
+				SKIP_INSTALL = YES;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = COREKIT_IN_TARGET;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		BB0000000000000000000050 /* Build configuration list for PBXNativeTarget "FinderSyncExt" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0000000000000000000062 /* Debug */,
+				BB0000000000000000000063 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		BB0000000000000000000051 /* Build configuration list for PBXProject "ExtBuild" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0000000000000000000060 /* Debug */,
+				BB0000000000000000000061 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = BB0000000000000000000000 /* Project object */;
+}

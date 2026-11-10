@@ -1,6 +1,9 @@
 import FinderSync
 import AppKit
+// xcodeproj 构建时 CoreKit 源文件直接编入本 module,无需 import(build.sh 仍走 SPM 动态链接)
+#if !COREKIT_IN_TARGET
 import CoreKit
+#endif
 
 class FinderSync: FIFinderSync {
     private let controller = FIFinderSyncController.default()

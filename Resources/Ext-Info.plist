@@ -7,11 +7,18 @@
     <key>CFBundleIdentifier</key><string>com.yaowl.RightClickKit.FinderSyncExt</string>
     <key>CFBundleExecutable</key><string>FinderSyncExt</string>
     <key>CFBundlePackageType</key><string>XPC!</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array><string>MacOSX</string></array>
     <key>CFBundleShortVersionString</key><string>0.1.0</string>
     <key>CFBundleVersion</key><string>1</string>
+    <key>DTPlatformName</key><string>macosx</string>
     <key>LSMinimumSystemVersion</key><string>12.0</string>
+    <key>LSUIElement</key><true/>
+    <key>NSPrincipalClass</key><string>NSApplication</string>
     <key>NSExtension</key>
     <dict>
+        <key>NSExtensionAttributes</key>
+        <dict/>
         <key>NSExtensionPointIdentifier</key>
         <string>com.apple.FinderSync</string>
         <key>NSExtensionPrincipalClass</key>
