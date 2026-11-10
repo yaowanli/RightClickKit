@@ -1,5 +1,6 @@
 #!/bin/bash
 # 生成最小合法的 docx/xlsx/pptx 空模板(纯 XML + zip,无需 Xcode)
+# 模板 GUI 打开性验证(Word/Pages/WPS/Keynote)统一留待 Task 13 验收第 1 项
 set -euo pipefail
 OUT="$(cd "$(dirname "$0")/.." && pwd)/Resources/Templates"
 mkdir -p "$OUT"
@@ -21,7 +22,8 @@ X
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p/></w:body></w:document>
 X
-  (cd "$d" && zip -q -X "$OUT/template.docx" "[Content_Types].xml" "_rels/.rels" "word/document.xml")
+  find "$d" -exec touch -t 202601010000 {} +
+  (cd "$d" && TZ=UTC zip -q -X "$OUT/template.docx" "[Content_Types].xml" "_rels/.rels" "word/document.xml")
 }
 
 make_xlsx() {
@@ -46,7 +48,8 @@ X
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <x:worksheet xmlns:x="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><x:sheetData/></x:worksheet>
 X
-  (cd "$d" && zip -q -X "$OUT/template.xlsx" "[Content_Types].xml" "_rels/.rels" "xl/_rels/workbook.xml.rels" "xl/workbook.xml" "xl/worksheets/sheet1.xml")
+  find "$d" -exec touch -t 202601010000 {} +
+  (cd "$d" && TZ=UTC zip -q -X "$OUT/template.xlsx" "[Content_Types].xml" "_rels/.rels" "xl/_rels/workbook.xml.rels" "xl/workbook.xml" "xl/worksheets/sheet1.xml")
 }
 
 make_pptx() {
@@ -70,7 +73,7 @@ X
 X
   cat > "$d/ppt/slides/slide1.xml" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:overrideClrMapping bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:clrMapOvr></p:sld>
+<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>
 X
   cat > "$d/ppt/slides/_rels/slide1.xml.rels" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -86,7 +89,7 @@ X
 X
   cat > "$d/ppt/slideMasters/slideMaster1.xml" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/></p:sldMaster>
+<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" accent5="accent5" accent6="accent6" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId1"/></p:sldLayoutIdLst></p:sldMaster>
 X
   cat > "$d/ppt/slideMasters/_rels/slideMaster1.xml.rels" <<'X'
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -96,7 +99,8 @@ X
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="Office"><a:themeElements><a:clrScheme name="Office"><a:dk1><a:srgbClr val="000000"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="44546A"/></a:dk2><a:lt2><a:srgbClr val="E7E6E6"/></a:lt2><a:accent1><a:srgbClr val="4472C4"/></a:accent1><a:accent2><a:srgbClr val="ED7D31"/></a:accent2><a:accent3><a:srgbClr val="A5A5A5"/></a:accent3><a:accent4><a:srgbClr val="FFC000"/></a:accent4><a:accent5><a:srgbClr val="5B9BD5"/></a:accent5><a:accent6><a:srgbClr val="70AD47"/></a:accent6><a:hlink><a:srgbClr val="0563C1"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme><a:fontScheme name="Office"><a:majorFont><a:latin typeface="Calibri Light"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont><a:minorFont><a:latin typeface="Calibri"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme><a:fmtScheme name="Office"><a:fillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:fillStyleLst><a:lnStyleLst><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln><a:ln><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:ln></a:lnStyleLst><a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst><a:bgFillStyleLst><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:solidFill><a:schemeClr val="phClr"/></a:solidFill></a:bgFillStyleLst></a:fmtScheme></a:themeElements></a:theme>
 X
-  (cd "$d" && zip -q -r -X "$OUT/template.pptx" .)
+  find "$d" -exec touch -t 202601010000 {} +
+  (cd "$d" && TZ=UTC zip -q -X "$OUT/template.pptx" "[Content_Types].xml" "_rels/.rels" "ppt/_rels/presentation.xml.rels" "ppt/presentation.xml" "ppt/slides/_rels/slide1.xml.rels" "ppt/slides/slide1.xml" "ppt/slideLayouts/_rels/slideLayout1.xml.rels" "ppt/slideLayouts/slideLayout1.xml" "ppt/slideMasters/_rels/slideMaster1.xml.rels" "ppt/slideMasters/slideMaster1.xml" "ppt/theme/theme1.xml")
 }
 
 make_docx
