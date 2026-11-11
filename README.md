@@ -1,6 +1,6 @@
 # RightClickKit
 
-自用 macOS Finder 右键增强工具:主 App + Finder Sync 扩展,在 Finder 右键菜单注入 12 个快捷功能。原生 Swift 实现,无第三方依赖,macOS 26 实测通过。
+自用 macOS Finder 右键增强工具:主 App + Finder Sync 扩展,在 Finder 右键菜单注入 13 个快捷功能。原生 Swift 实现,无第三方依赖,macOS 26 实测通过。
 
 ## 功能
 
@@ -9,6 +9,7 @@
 | 新建文件 | 在当前位置新建 TXT / Markdown / Word / Excel / PPT 文档,支持自动进入重命名 |
 | 新建文件夹 | 在当前位置新建文件夹 |
 | 使用文件名新建文件夹 | 选中文件,以其文件名建文件夹并移入 |
+| 打开终端 | 在当前文件夹打开终端;选中文件夹时打开该文件夹 |
 | 剪切 | 剪切入队列,在目标文件夹右键「粘贴(移动到此处)」完成移动 |
 | 拷贝路径 / 拷贝名称 | 复制选中项目的完整路径或名称;文件夹背景右键时拷当前文件夹路径 |
 | 压缩为 zip | 多选支持,布局与 Finder「压缩」一致 |
@@ -62,7 +63,7 @@ CoreKit/             SPM 纯逻辑包(PathUtils/FileWalker/RenameRules/MojibakeF
   Sources/CoreKitTestRunner/   轻量测试执行器(CLT 无 XCTest,手写断言 harness)
 ext.xcodeproj        扩展 target(CoreKit 源码经 COREKIT_IN_TARGET 直接编入同一 module)
 Resources/           appex plist / entitlements / Office 模板
-scripts/             模板生成脚本
+scripts/             模板与图标生成脚本(make_icon.swift 渲染 AppIcon.icns)
 docs/                设计规格与实施计划(含 18 轮执行修订记录)
 ```
 

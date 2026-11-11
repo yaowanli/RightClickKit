@@ -50,6 +50,7 @@ class FinderSync: FIFinderSync {
         }
         add(to: menu, flags: flags, feature: .newFolder, action: #selector(newFolder(_:)))
         add(to: menu, flags: flags, feature: .folderFromName, action: #selector(folderFromName(_:)))
+        add(to: menu, flags: flags, feature: .openTerminal, action: #selector(openTerminal(_:)))
         add(to: menu, flags: flags, feature: .copyName, action: #selector(copyName(_:)))
         add(to: menu, flags: flags, feature: .copyPath, action: #selector(copyPath(_:)))
         add(to: menu, flags: flags, feature: .cut, action: #selector(cutFiles(_:)))
@@ -93,6 +94,21 @@ class FinderSync: FIFinderSync {
         img.size = NSSize(width: 16, height: 16)
         Self.iconCache.setObject(img, forKey: symbol as NSString)
         return img
+    }
+
+    @objc private func openTerminal(_ sender: NSMenuItem) {
+        guard let dir = workingDirectory() else { notify("无法定位当前文件夹"); return }
+        guard let terminal = NSWorkspace.shared.urlForApplication(withBundleIdentifier: "com.apple.Terminal") else {
+            notify("未找到终端应用(Terminal.app)"); return
+        }
+        // 把文件夹当文档传给终端 App(RClick 同款):Terminal 收到目录即开新窗口并 cd 过去
+        let config = NSWorkspace.OpenConfiguration()
+        config.activates = true
+        NSWorkspace.shared.open([dir], withApplicationAt: terminal, configuration: config) { [weak self] _, error in
+            guard let error else { return }
+            NSLog("[RCK] 打开终端失败: \(error)")
+            DispatchQueue.main.async { self?.notify("打开终端失败:\(error.localizedDescription)") }
+        }
     }
 
     @objc private func copyPath(_ sender: NSMenuItem) {

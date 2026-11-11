@@ -61,6 +61,7 @@ fi
 
 echo "==> 写入 plist 与模板资源"
 cp "$ROOT/Resources/App-Info.plist" "$APP/Contents/Info.plist"
+cp "$ROOT/Resources/AppIcon.icns" "$APP/Contents/Resources/"
 
 echo "==> 签名(先内后外,身份:$SIGN_IDENTITY)"
 if [ -n "$XB" ]; then
