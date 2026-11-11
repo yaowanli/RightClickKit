@@ -5,13 +5,12 @@ import CoreKit
 struct DeleteForeverView: View {
     let urls: [URL]
     @State private var totalSize: Int64?
-    @State private var acknowledged = false
     @State private var working = false
     @State private var error: String?
     @State private var done = false
 
     static func show(urls: [URL]) {
-        ActionWindow.show(title: "彻底删除", width: 440, height: 260) {
+        ActionWindow.show(title: "彻底删除", width: 440, height: 290) {
             DeleteForeverView(urls: urls)
         }
     }
@@ -23,22 +22,28 @@ struct DeleteForeverView: View {
             Text("路径:\(pathsSummary)")
                 .font(.caption).foregroundColor(.secondary).lineLimit(3)
             Text(sizeText).foregroundColor(.secondary)
-            Toggle("我了解:此操作不进废纸篓,不可恢复", isOn: $acknowledged)
-                .disabled(working)
+            Label("此操作不进废纸篓,删除后不可恢复", systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundColor(.red)
             if let error { Text(error).foregroundColor(.red).font(.caption) }
-            if done { Text("已删除。").foregroundColor(.green) }
+            if done { StatusChip(kind: .ok, text: "已删除") }
             HStack {
+                if working { ProgressView().controlSize(.small) }
                 Spacer()
                 Button("取消") { closeWindow() }.keyboardShortcut(.cancelAction).disabled(working)
                 Button(working ? "删除中…" : "彻底删除") { delete() }
                     .keyboardShortcut(.defaultAction)
-                    .disabled(!acknowledged || working || done)
+                    .disabled(working || done)
                     .buttonStyle(.borderedProminent)
                     .tint(.red)
             }
+            HStack {
+                Spacer()
+                SourceBadge()
+            }
         }
         .padding(20)
-        .frame(width: 440, height: 260)
+        .frame(width: 440, height: 290)
         .task { totalSize = await Task.detached { FileWalker.totalSize(of: urls) }.value }
     }
 
@@ -63,9 +68,17 @@ struct DeleteForeverView: View {
             let reported = firstError // 落为 let 再进 MainActor.run,消除并发捕获 var 警告(Swift 6 将为错误)
             await MainActor.run {
                 working = false
-                if let e = reported { error = e } else { done = true }
+                if let e = reported {
+                    error = e
+                } else {
+                    done = true
+                    // 成功后让用户瞥见「已删除」再自动关窗;失败保留窗口供重试
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                        ActionWindow.close(title: "彻底删除")
+                    }
+                }
             }
         }
     }
-    private func closeWindow() { NSApp.keyWindow?.close() }
+    private func closeWindow() { ActionWindow.close(title: "彻底删除") }
 }

@@ -95,8 +95,9 @@ struct BatchRenameView: View {
             }
 
             HStack {
+                if working { ProgressView().controlSize(.small) }
                 if let error { Text(error).font(.caption).foregroundColor(.red) }
-                if done { Text("已重命名 \(renamedCount) 项。").font(.caption).foregroundColor(.green) }
+                if done { StatusChip(kind: .ok, text: "已重命名 \(renamedCount) 项") }
                 Spacer()
                 Button("取消") { closeWindow() }.keyboardShortcut(.cancelAction).disabled(working)
                 Button(working ? "重命名中…" : "应用") { apply() }
@@ -138,5 +139,5 @@ struct BatchRenameView: View {
             }
         }
     }
-    private func closeWindow() { NSApp.keyWindow?.close() }
+    private func closeWindow() { ActionWindow.close(title: "批量重命名") }
 }

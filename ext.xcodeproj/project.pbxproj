@@ -18,10 +18,13 @@
 		BB0000000000000000000009 /* template.docx in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000025; };
 		BB000000000000000000000A /* template.pptx in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000026; };
 		BB000000000000000000000B /* template.xlsx in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000027; };
+		BB000000000000000000000C /* DeleteConfirmPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000001A; };
+		BB000000000000000000000D /* Zipper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000001B; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		BB0000000000000000000011 /* FinderSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FinderSync.swift; sourceTree = "<group>"; };
+		BB000000000000000000001A /* DeleteConfirmPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DeleteConfirmPanel.swift; sourceTree = "<group>"; };
 		BB0000000000000000000012 /* ActionPayload.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ActionPayload.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/ActionPayload.swift"; sourceTree = "<absolute>"; };
 		BB0000000000000000000013 /* FeatureStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FeatureStore.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/FeatureStore.swift"; sourceTree = "<absolute>"; };
 		BB0000000000000000000014 /* FileOps.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = FileOps.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/FileOps.swift"; sourceTree = "<absolute>"; };
@@ -29,6 +32,7 @@
 		BB0000000000000000000016 /* MojibakeFixer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = MojibakeFixer.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/MojibakeFixer.swift"; sourceTree = "<absolute>"; };
 		BB0000000000000000000017 /* PathUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PathUtils.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/PathUtils.swift"; sourceTree = "<absolute>"; };
 		BB0000000000000000000018 /* RenameRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenameRules.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/RenameRules.swift"; sourceTree = "<absolute>"; };
+		BB000000000000000000001B /* Zipper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Zipper.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/Zipper.swift"; sourceTree = "<absolute>"; };
 		BB0000000000000000000019 /* FinderSyncExt.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinderSyncExt.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000000020 /* Ext-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Ext-Info.plist"; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext-Info.plist"; sourceTree = "<absolute>"; };
 		BB0000000000000000000021 /* Ext.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "Ext.entitlements"; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext.entitlements"; sourceTree = "<absolute>"; };
@@ -37,6 +41,7 @@
 		BB0000000000000000000027 /* template.xlsx */ = {isa = PBXFileReference; lastKnownFileType = file; name = template.xlsx; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Templates/template.xlsx"; sourceTree = "<absolute>"; };
 		BB0000000000000000000022 /* FinderSyncExt */ = {isa = PBXGroup; children = (
 			BB0000000000000000000011 /* FinderSync.swift */,
+			BB000000000000000000001A /* DeleteConfirmPanel.swift */,
 		); path = "/Users/yaowl/orca/projects/mac-右键快捷键/FinderSyncExt"; sourceTree = "<absolute>"; };
 		BB0000000000000000000023 /* Products */ = {isa = PBXGroup; children = (
 			BB0000000000000000000019 /* FinderSyncExt.appex */,
@@ -122,6 +127,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				BB0000000000000000000001 /* FinderSync.swift in Sources */,
+				BB000000000000000000000C /* DeleteConfirmPanel.swift in Sources */,
 				BB0000000000000000000002 /* ActionPayload.swift in Sources */,
 				BB0000000000000000000003 /* FeatureStore.swift in Sources */,
 				BB0000000000000000000004 /* FileOps.swift in Sources */,
@@ -129,6 +135,7 @@
 				BB0000000000000000000006 /* MojibakeFixer.swift in Sources */,
 				BB0000000000000000000007 /* PathUtils.swift in Sources */,
 				BB0000000000000000000008 /* RenameRules.swift in Sources */,
+				BB000000000000000000000D /* Zipper.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

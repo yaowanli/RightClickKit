@@ -45,8 +45,9 @@ struct MojibakeFixView: View {
                 }.padding(.vertical, 2)
             }
             HStack {
+                if working { ProgressView().controlSize(.small) }
                 if let error { Text(error).font(.caption).foregroundColor(.red) }
-                if done { Text("已修复 \(fixedCount) 项。").font(.caption).foregroundColor(.green) }
+                if done { StatusChip(kind: .ok, text: "已修复 \(fixedCount) 项") }
                 Spacer()
                 Button("取消") { closeWindow() }.keyboardShortcut(.cancelAction).disabled(working)
                 Button(working ? "修复中…" : "应用") { apply() }
@@ -102,5 +103,5 @@ struct MojibakeFixView: View {
             }
         }
     }
-    private func closeWindow() { NSApp.keyWindow?.close() }
+    private func closeWindow() { ActionWindow.close(title: "修复乱码文件名") }
 }

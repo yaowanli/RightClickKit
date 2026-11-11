@@ -6,6 +6,7 @@ runMojibakeTests()
 runRenameTests()
 runActionPayloadTests()
 runFileOpsTests()
+runZipperTests()
 
 cleanupTempDirs()
 
