@@ -72,8 +72,15 @@ struct ExtensionTab: View {
     }
 
     private func refresh() {
-        extStatus = ExtStatus.detect()
-        axGranted = AXIsProcessTrusted()
+        // detect() 会 fork pluginkit 子进程并同步等待,放后台跑避免每 3 秒卡一次主线程
+        DispatchQueue.global(qos: .userInitiated).async {
+            let status = ExtStatus.detect()
+            let ax = AXIsProcessTrusted()
+            DispatchQueue.main.async {
+                extStatus = status
+                axGranted = ax
+            }
+        }
     }
 
     private func openSettings(_ urlString: String) {
@@ -84,8 +91,7 @@ struct ExtensionTab: View {
 }
 
 struct FeaturesTab: View {
-    @State private var flags: [Feature: Bool] = Dictionary(
-        uniqueKeysWithValues: Feature.allCases.map { ($0, FeatureStore.isEnabled($0)) })
+    @State private var flags: [Feature: Bool] = FeatureStore.flags()
 
     var body: some View {
         ScrollView {

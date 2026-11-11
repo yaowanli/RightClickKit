@@ -111,16 +111,3 @@ struct FeatureCardRow: View {
     }
 }
 
-/// 弹窗来源标(FinderRight FRDialog 同款):从 Finder 触发的窗口让用户知道是谁弹的
-struct SourceBadge: View {
-    var body: some View {
-        HStack(spacing: 4) {
-            Image(nsImage: NSApp.applicationIconImage)
-                .resizable()
-                .frame(width: 12, height: 12)
-            Text("RightClickKit")
-                .font(.system(size: 10.5))
-                .foregroundColor(.secondary)
-        }
-    }
-}

@@ -91,17 +91,26 @@ public enum FeatureStore {
         return dict
     }
 
+    /// 一次读取全部开关:menu(for:)/设置页用这个,逐项 isEnabled 会把文件 IO 乘以 12
+    public static func flags() -> [Feature: Bool] {
+        let dict = load()
+        var out: [Feature: Bool] = [:]
+        for f in Feature.allCases { out[f] = dict[f.rawValue] ?? true }
+        return out
+    }
+
     public static func isEnabled(_ f: Feature) -> Bool {
         load()[f.rawValue] ?? true
     }
 
     public static func setEnabled(_ f: Feature, _ on: Bool) {
         let fm = FileManager.default
-        try? fm.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: false)
+        let dir = fileURL.deletingLastPathComponent()
+        do { try fm.createDirectory(at: dir, withIntermediateDirectories: true) }
+        catch { NSLog("[RCK] 创建配置目录失败 \(dir.path): \(error)"); return }
         var dict = load()
         dict[f.rawValue] = on
-        if let data = try? JSONEncoder().encode(dict) {
-            try? data.write(to: fileURL, options: .atomic)
-        }
+        do { try JSONEncoder().encode(dict).write(to: fileURL, options: .atomic) }
+        catch { NSLog("[RCK] 写入功能开关失败 \(fileURL.path): \(error)") }
     }
 }

@@ -30,13 +30,17 @@ final class DeleteConfirmPanel: NSObject, NSWindowDelegate {
     /// 全局单实例:同一时刻只存在一个删除确认浮层
     private static var shared: DeleteConfirmPanel?
 
-    private static let width: CGFloat = 420
+    fileprivate static let width: CGFloat = 420
 
     private var urls: [URL]
     private let model = Model()
     private let panel: ConfirmPanel
     private var hosting: NSHostingView<DeleteConfirmContent>!
     private var cancellables = Set<AnyCancellable>()
+    /// 代际令牌:replace(with:) 换批次时 +1,作废在途的大小计算/删除回调,防止旧批次污染新批次状态
+    private var generation = 0
+    /// 确认成功后的延迟自动关窗;replace 时取消,避免关掉用户刚换上的新批次确认框
+    private var autoClose: DispatchWorkItem?
 
     static func present(urls: [URL]) {
         DispatchQueue.main.async {
@@ -58,13 +62,22 @@ final class DeleteConfirmPanel: NSObject, NSWindowDelegate {
         super.init()
 
         rebuildContent()
-        model.onCancel = { [weak self] in self?.close() }
-        model.onConfirm = { [weak self] in self?.confirm() }
-        panel.onCancel = { [weak self] in self?.close() }
-        // 错误提示/完成胶囊会改变高度:内容变化后自动调整窗口(顶边不动,向下伸缩)
+        // 删除中不允许取消:后台 removeItem 循环无法中止,关掉面板只会让删除静默继续
+        model.onCancel = { [weak self] in
+            guard let self, !self.model.working else { return }
+            self.close()
+        }
+        panel.onCancel = { [weak self] in
+            guard let self, !self.model.working else { return }
+            self.close()
+        }
+        // 错误提示/完成胶囊会改变高度:内容变化后按新布局量高(底边不动,不重置用户拖放的位置)
         model.objectWillChange
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.fitContent() }
+            .sink { [weak self] _ in
+                // objectWillChange 是 willSet 时机,再让过一个 runloop 等 SwiftUI 完成重排
+                DispatchQueue.main.async { self?.fitContent(keepsOrigin: true) }
+            }
             .store(in: &cancellables)
 
         panel.titleVisibility = .hidden
@@ -92,6 +105,9 @@ final class DeleteConfirmPanel: NSObject, NSWindowDelegate {
             panel.makeKeyAndOrderFront(nil)
             return
         }
+        generation += 1
+        autoClose?.cancel()
+        autoClose = nil
         urls = newUrls
         model.working = false
         model.error = nil
@@ -112,9 +128,13 @@ final class DeleteConfirmPanel: NSObject, NSWindowDelegate {
     private func computeTotalSize() {
         model.totalSize = nil
         let targets = urls
-        DispatchQueue.global(qos: .userInitiated).async { [model] in
+        let gen = generation
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, model] in
             let total = FileWalker.totalSize(of: targets)
-            DispatchQueue.main.async { model.totalSize = total }
+            DispatchQueue.main.async {
+                guard let self, self.generation == gen else { return } // 批次已换,丢弃旧结果
+                model.totalSize = total
+            }
         }
     }
 
@@ -130,19 +150,24 @@ final class DeleteConfirmPanel: NSObject, NSWindowDelegate {
         RunLoop.main.add(retry, forMode: .common)
     }
 
-    /// 居中到鼠标所在屏幕(Finder 通常就在那里);错误提示改变高度时重新居中
-    private func fitContent() {
+    /// 首次展示/换批次:居中到鼠标所在屏幕(Finder 通常就在那里);
+    /// 之后内容高度变化走 keepsOrigin,只调高度不重置用户拖放的位置
+    private func fitContent(keepsOrigin: Bool = false) {
         guard let hosting else { return }
         let size = hosting.fittingSize
         let height = max(size.height, 140)
         var frame = panel.frameRect(forContentRect: NSRect(origin: .zero, size: NSSize(width: Self.width, height: height)))
-        let mouse = NSEvent.mouseLocation
-        let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.visibleFrame, false) } ?? NSScreen.main
-        if let visibleFrame = screen?.visibleFrame {
-            frame.origin = NSPoint(x: visibleFrame.midX - frame.width / 2,
-                                   y: visibleFrame.midY - frame.height / 2)
+        if keepsOrigin {
+            frame.origin = panel.frame.origin
         } else {
-            frame.origin = NSPoint(x: panel.frame.minX, y: panel.frame.maxY - frame.height)
+            let mouse = NSEvent.mouseLocation
+            let screen = NSScreen.screens.first { NSMouseInRect(mouse, $0.visibleFrame, false) } ?? NSScreen.main
+            if let visibleFrame = screen?.visibleFrame {
+                frame.origin = NSPoint(x: visibleFrame.midX - frame.width / 2,
+                                       y: visibleFrame.midY - frame.height / 2)
+            } else {
+                frame.origin = NSPoint(x: panel.frame.minX, y: panel.frame.maxY - frame.height)
+            }
         }
         panel.setFrame(frame, display: true)
     }
@@ -152,28 +177,32 @@ final class DeleteConfirmPanel: NSObject, NSWindowDelegate {
         model.working = true
         model.error = nil
         let targets = urls
-        DispatchQueue.global(qos: .userInitiated).async { [model] in
+        let gen = generation
+        DispatchQueue.global(qos: .userInitiated).async { [weak self, model] in
             var firstError: String?
             for t in targets {
                 do { try FileManager.default.removeItem(at: t) }
                 catch { if firstError == nil { firstError = error.localizedDescription } }
             }
             DispatchQueue.main.async {
+                guard let self, self.generation == gen else { return } // 批次已换,不让旧删除写新批次状态
                 model.working = false
                 if let e = firstError {
                     model.error = e
                 } else {
                     model.done = true
-                    // 让用户瞥见「已删除」再自动关闭
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-                        self?.close()
-                    }
+                    // 让用户瞥见「已删除」再自动关闭;换批次时取消,避免关掉新确认框
+                    let work = DispatchWorkItem { [weak self] in self?.close() }
+                    self.autoClose = work
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: work)
                 }
             }
         }
     }
 
     private func close() {
+        autoClose?.cancel()
+        autoClose = nil
         panel.orderOut(nil)
         panel.close()
     }
@@ -248,6 +277,7 @@ private struct DeleteConfirmContent: View {
                 Spacer(minLength: 0)
                 Button("取消") { model.onCancel?() }
                     .keyboardShortcut(.cancelAction)
+                    .disabled(model.working)
                 Button(model.working ? "删除中…" : "彻底删除") { model.onConfirm?() }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
@@ -258,7 +288,7 @@ private struct DeleteConfirmContent: View {
         .padding(.horizontal, 18)
         .padding(.top, 16)
         .padding(.bottom, 16)
-        .frame(width: 420, alignment: .leading)
+        .frame(width: DeleteConfirmPanel.width, alignment: .leading)
     }
 
     private var pathsSummary: String {

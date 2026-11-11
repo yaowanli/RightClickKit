@@ -13,7 +13,6 @@ enum ActionRouter {
         guard !urls.isEmpty else { return } // 空 p=%5B%5D 不弹空窗
         DispatchQueue.main.async {
             switch payload.action {
-            case "delete-forever": DeleteForeverView.show(urls: urls)
             case "batch-rename":   BatchRenameView.show(urls: urls)
             case "fix-mojibake":   MojibakeFixView.show(urls: urls)
             default: break

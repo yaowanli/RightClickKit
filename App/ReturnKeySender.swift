@@ -15,6 +15,11 @@ enum ReturnKeySender {
             while Date() < deadline {
                 if NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder" {
                     usleep(100_000) // 激活与选中非同时完成,留稳定窗口再触发
+                    // 稳定窗口内焦点可能易主,发键前复核,避免合成 Return 打进别的应用
+                    guard NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.finder" else {
+                        NSLog("[RCK] rename-hint: 稳定窗口内焦点已切换,跳过自动重命名")
+                        return
+                    }
                     postReturn()
                     return
                 }

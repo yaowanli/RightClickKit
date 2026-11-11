@@ -18,7 +18,8 @@ enum ActionWindow {
     /// 复用即整体替换 contentView → 全新 view 树,@State 天然重置,调用方无需手动清状态。
     @discardableResult
     static func show(title: String, width: CGFloat, height: CGFloat,
-                     @ViewBuilder content: () -> some View) -> NSWindow {        if let entry = alive[title] {
+                     @ViewBuilder content: () -> some View) -> NSWindow {
+        if let entry = alive[title] {
             entry.window.contentView = makeHost(content())
             entry.window.makeKeyAndOrderFront(nil)
             NSApp.activate(ignoringOtherApps: true)

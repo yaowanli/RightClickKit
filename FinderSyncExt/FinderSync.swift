@@ -22,8 +22,10 @@ class FinderSync: FIFinderSync {
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
         dbg("menu(for:) kind=\(menuKind.rawValue)")
         let menu = NSMenu(title: "RightClickKit")
+        // 一次读文件取全部开关快照:isEnabled 逐项读会变成每次右键 12 次文件 IO
+        let flags = FeatureStore.flags()
         // —— 新建文件子菜单 ——
-        if FeatureStore.isEnabled(.newFile) {
+        if flags[.newFile] ?? true {
             let newFile = NSMenuItem(title: "新建文件", action: nil, keyEquivalent: "")
             newFile.image = image("doc.badge.plus")
             let sub = NSMenu(title: "新建文件")
@@ -46,11 +48,11 @@ class FinderSync: FIFinderSync {
             newFile.submenu = sub
             menu.addItem(newFile)
         }
-        add(to: menu, feature: .newFolder, action: #selector(newFolder(_:)))
-        add(to: menu, feature: .folderFromName, action: #selector(folderFromName(_:)))
-        add(to: menu, feature: .copyName, action: #selector(copyName(_:)))
-        add(to: menu, feature: .copyPath, action: #selector(copyPath(_:)))
-        add(to: menu, feature: .cut, action: #selector(cutFiles(_:)))
+        add(to: menu, flags: flags, feature: .newFolder, action: #selector(newFolder(_:)))
+        add(to: menu, flags: flags, feature: .folderFromName, action: #selector(folderFromName(_:)))
+        add(to: menu, flags: flags, feature: .copyName, action: #selector(copyName(_:)))
+        add(to: menu, flags: flags, feature: .copyPath, action: #selector(copyPath(_:)))
+        add(to: menu, flags: flags, feature: .cut, action: #selector(cutFiles(_:)))
         // 剪切队列非空时提供「粘贴」与「取消剪切」;放在剪切正下方,语义相邻
         let cutQueue = UserDefaults.standard.stringArray(forKey: Self.cutQueueKey) ?? []
         if !cutQueue.isEmpty {
@@ -64,17 +66,17 @@ class FinderSync: FIFinderSync {
             cancel.image = image("xmark.circle")
             menu.addItem(cancel)
         }
-        add(to: menu, feature: .compressZip, action: #selector(compressZip(_:)))
-        add(to: menu, feature: .compress7z, action: #selector(compress7z(_:)))
-        add(to: menu, feature: .grantWrite, action: #selector(grantWrite(_:)))
-        add(to: menu, feature: .deleteForever, action: #selector(deleteForever(_:)))
-        add(to: menu, feature: .batchRename, action: #selector(batchRename(_:)))
-        add(to: menu, feature: .fixMojibake, action: #selector(fixMojibake(_:)))
+        add(to: menu, flags: flags, feature: .compressZip, action: #selector(compressZip(_:)))
+        add(to: menu, flags: flags, feature: .compress7z, action: #selector(compress7z(_:)))
+        add(to: menu, flags: flags, feature: .grantWrite, action: #selector(grantWrite(_:)))
+        add(to: menu, flags: flags, feature: .deleteForever, action: #selector(deleteForever(_:)))
+        add(to: menu, flags: flags, feature: .batchRename, action: #selector(batchRename(_:)))
+        add(to: menu, flags: flags, feature: .fixMojibake, action: #selector(fixMojibake(_:)))
         return menu
     }
 
-    private func add(to menu: NSMenu, feature: Feature, action: Selector) {
-        guard FeatureStore.isEnabled(feature) else { return }
+    private func add(to menu: NSMenu, flags: [Feature: Bool], feature: Feature, action: Selector) {
+        guard flags[feature] ?? true else { return }
         let item = NSMenuItem(title: feature.title, action: action, keyEquivalent: "")
         item.target = self
         item.image = image(feature.icon)
@@ -114,12 +116,13 @@ class FinderSync: FIFinderSync {
     @objc private func newXLSX(_ sender: NSMenuItem) { createTemplate("xlsx") }
     @objc private func newPPTX(_ sender: NSMenuItem) { createTemplate("pptx") }
 
-    /// 新建目标目录:选中的单个文件夹进其内部,否则 Finder 当前目录(FinderRight/RClick 同款语义)
+    /// 新建目标目录:仅当选中的单个文件夹时进其内部,否则 Finder 当前目录(FinderRight/RClick 同款语义)
     private func workingDirectory() -> URL? {
-        if let first = controller.selectedItemURLs()?.first {
+        let sel = controller.selectedItemURLs() ?? []
+        if sel.count == 1 {
             var isDir: ObjCBool = false
-            if FileManager.default.fileExists(atPath: first.path, isDirectory: &isDir), isDir.boolValue {
-                return first
+            if FileManager.default.fileExists(atPath: sel[0].path, isDirectory: &isDir), isDir.boolValue {
+                return sel[0]
             }
         }
         return controller.targetedURL()
@@ -163,11 +166,21 @@ class FinderSync: FIFinderSync {
     /// 主 App 未运行/无辅助功能权限时静默跳过,只保持选中
     private func selectAndRename(_ url: URL) {
         NSWorkspace.shared.activateFileViewerSelecting([url])
-        guard let mainID = Bundle.main.bundleIdentifier?.replacingOccurrences(of: ".FinderSyncExt", with: ""),
-          !mainID.isEmpty,
+        guard let mainID = hostAppURL().flatMap({ Bundle(url: $0)?.bundleIdentifier }), !mainID.isEmpty,
           !NSRunningApplication.runningApplications(withBundleIdentifier: mainID).isEmpty else { return }
         guard let hint = ActionPayload(action: "rename-hint", paths: []).makeURL() else { return }
         openURLWithHostApp(hint, activates: false)
+    }
+
+    /// 主 App 的 .app URL:从扩展 bundle 路径上溯三级。唤起主 App 与主 App bundle ID 探测共用这一个机制
+    private func hostAppURL() -> URL? {
+        let appexPath = Bundle.main.bundlePath
+        guard appexPath.hasSuffix(".appex") else { return Bundle.main.bundleURL }
+        var ns = (appexPath as NSString)
+        ns = (ns.deletingLastPathComponent) as NSString  // PlugIns
+        ns = (ns.deletingLastPathComponent) as NSString  // Contents
+        ns = (ns.deletingLastPathComponent) as NSString  // 主 App .app
+        return URL(fileURLWithPath: ns as String)
     }
 
     @objc private func folderFromName(_ sender: NSMenuItem) {
@@ -222,6 +235,13 @@ class FinderSync: FIFinderSync {
         guard let paths = UserDefaults.standard.stringArray(forKey: Self.cutQueueKey), !paths.isEmpty else {
             notify("剪切队列为空"); return
         }
+        // 跨卷移动会退化为逐字节拷贝,同步等待会卡住扩展主线程 → 后台执行,完成后回主线程选中/通知
+        DispatchQueue.global(qos: .userInitiated).async {
+            self.pasteMoveInBackground(paths: paths, dir: dir)
+        }
+    }
+
+    private func pasteMoveInBackground(paths: [String], dir: URL) {
         let fm = FileManager.default
         let dirPath = dir.path(percentEncoded: false)
         var moved: [URL] = []
@@ -248,30 +268,23 @@ class FinderSync: FIFinderSync {
         } else {
             UserDefaults.standard.set(remain, forKey: Self.cutQueueKey)
         }
-        if !moved.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(moved) }
-        if failed > 0 {
-            notify("移动完成 \(moved.count) 项,失败 \(failed) 项")
-        } else if moved.isEmpty, skipped > 0 {
-            notify("所选项目就在当前文件夹,无需移动")
-        } else if moved.isEmpty {
-            notify("没有可移动的项目(源文件可能已被删除)")
-        } else {
-            notify("已移动 \(moved.count) 项")
+        DispatchQueue.main.async {
+            if !moved.isEmpty { NSWorkspace.shared.activateFileViewerSelecting(moved) }
+            if failed > 0 {
+                self.notify("移动完成 \(moved.count) 项,失败 \(failed) 项")
+            } else if moved.isEmpty, skipped > 0 {
+                self.notify("所选项目就在当前文件夹,无需移动")
+            } else if moved.isEmpty {
+                self.notify("没有可移动的项目(源文件可能已被删除)")
+            } else {
+                self.notify("已移动 \(moved.count) 项")
+            }
         }
     }
 
     @objc private func compressZip(_ sender: NSMenuItem) {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
-        // 压缩耗时不可控(大文件),同步等待会卡住扩展主线程 → 后台执行,完成后回主线程通知/选中
-        DispatchQueue.global(qos: .userInitiated).async {
-            let result = Zipper.zip(items: urls)
-            DispatchQueue.main.async {
-                switch result {
-                case .success(let url): NSWorkspace.shared.activateFileViewerSelecting([url])
-                case .failure(let f): self.notify(f.message)
-                }
-            }
-        }
+        runCompression { Zipper.zip(items: urls) }
     }
 
     @objc private func compress7z(_ sender: NSMenuItem) {
@@ -279,8 +292,13 @@ class FinderSync: FIFinderSync {
         guard let tool = Zipper.locate7z() else {
             notify("未找到 7zz/7za,请执行:brew install p7zip"); return
         }
+        runCompression { Zipper.sevenZip(items: urls, toolPath: tool) }
+    }
+
+    /// 压缩耗时不可控(大文件),同步等待会卡住扩展主线程 → 后台执行,完成后回主线程通知/选中
+    private func runCompression(_ op: @escaping () -> Result<URL, Zipper.Failure>) {
         DispatchQueue.global(qos: .userInitiated).async {
-            let result = Zipper.sevenZip(items: urls, toolPath: tool)
+            let result = op()
             DispatchQueue.main.async {
                 switch result {
                 case .success(let url): NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -316,13 +334,7 @@ class FinderSync: FIFinderSync {
     /// 沙盒扩展内 NSWorkspace.open(自定义 scheme) 会让 LS 弹「选择应用」框:
     /// LS 按扩展 bundle 查 claim 查不到(claim 挂在主 App)。改为显式指定主 App 打开
     private func openURLWithHostApp(_ url: URL, activates: Bool) {
-        let appexPath = Bundle.main.bundlePath
-        if appexPath.hasSuffix(".appex") {
-            var ns = (appexPath as NSString)
-            ns = (ns.deletingLastPathComponent) as NSString  // PlugIns
-            ns = (ns.deletingLastPathComponent) as NSString  // Contents
-            ns = (ns.deletingLastPathComponent) as NSString  // 主 App .app
-            let appURL = URL(fileURLWithPath: ns as String)
+        if let appURL = hostAppURL(), appURL.pathExtension == "app" {
             let config = NSWorkspace.OpenConfiguration()
             config.activates = activates
             config.createsNewApplicationInstance = false

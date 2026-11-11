@@ -89,19 +89,27 @@ public enum Zipper {
     public static func sevenZip(items: [URL], toolPath: String) -> Result<URL, Failure> {
         guard let first = items.first else { return .failure(Failure("没有可压缩的项目")) }
         let dir = first.deletingLastPathComponent()
-        let out = dir.appendingPathComponent(
-            PathUtils.uniqueName(in: dir, base: baseName(first), ext: "7z"))
+        // 与 zip 同款竞态防护:正式名在压缩开始前定好会被 `7z a` 静默更新合并进已有档案,
+        // 先压唯一临时名,完成后再挑正式名改名
+        let tmpOut = dir.appendingPathComponent(".rck-7z-\(UUID().uuidString).7z")
+        defer { try? FileManager.default.removeItem(at: tmpOut) }
         // cwd 设为首项目录、参数用 lastPathComponent 相对路径(Process 直传 argv 无 shell 切分问题)
         guard let result = runTool(
             executable: toolPath,
-            arguments: ["a", "-bd", out.path] + items.map { $0.lastPathComponent },
+            arguments: ["a", "-bd", tmpOut.path] + items.map { $0.lastPathComponent },
             cwd: dir.path) else {
             return .failure(Failure("7z 压缩失败:无法启动 7zz/7za"))
         }
         guard result.status == 0 else {
-            try? FileManager.default.removeItem(at: out)
             let detail = result.stderr.isEmpty ? "" : ":\(result.stderr.prefix(200))"
             return .failure(Failure("7z 压缩失败(退出码 \(result.status))\(detail)"))
+        }
+        let out = dir.appendingPathComponent(
+            PathUtils.uniqueName(in: dir, base: baseName(first), ext: "7z"))
+        do {
+            try FileManager.default.moveItem(at: tmpOut, to: out)
+        } catch {
+            return .failure(Failure("7z 压缩失败:\(error.localizedDescription)"))
         }
         return .success(out)
     }
