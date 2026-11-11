@@ -89,8 +89,11 @@ pluginkit -a "$APP" || true
 pluginkit -e use -i "$APP_ID.FinderSyncExt" 2>/dev/null || true
 killall pkd 2>/dev/null || true
 sleep 3
+# LS 收录 appex 的可靠触发方式是启动一次主 App;pkd 选举需要 LS 先收录
+open "$APP" 2>/dev/null || true
+sleep 3
 if ! pluginkit -m | grep -q "$APP_ID.FinderSyncExt"; then
-  echo "提示:扩展暂未出现在 pluginkit,启动一次 $APP 后重跑本脚本即可。" >&2
+  echo "提示:扩展暂未出现在 pluginkit,请重跑本脚本。" >&2
 fi
 
 codesign -dv "$APP" 2>&1 | head -2 || true

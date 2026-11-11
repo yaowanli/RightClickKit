@@ -1,5 +1,6 @@
 import FinderSync
 import AppKit
+import UserNotifications
 // xcodeproj 构建时 CoreKit 源文件直接编入本 module,无需 import(build.sh 仍走 SPM 动态链接)
 #if !COREKIT_IN_TARGET
 import CoreKit
@@ -12,26 +13,33 @@ class FinderSync: FIFinderSync {
         super.init()
         // 监听全盘,Finder 所有文件夹的右键菜单都出现本扩展
         controller.directoryURLs.insert(URL(fileURLWithPath: "/"))
+        // 沙盒内 osascript 发 Apple Events 被静默拒,通知走 UNUserNotificationCenter
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, err in
+            NSLog("[RCK] 通知授权 granted=\(granted) err=\(String(describing: err))")
+        }
     }
 
     override func menu(for menuKind: FIMenuKind) -> NSMenu {
+        dbg("menu(for:) kind=\(menuKind.rawValue)")
         let menu = NSMenu(title: "RightClickKit")
         // —— 新建文件子菜单 ——
         if FeatureStore.isEnabled(.newFile) {
             let newFile = NSMenuItem(title: "新建文件", action: nil, keyEquivalent: "")
             newFile.image = image("doc.badge.plus")
             let sub = NSMenu(title: "新建文件")
-            let templates: [(String, String, String)] = [
-                ("TXT 文本", "txt", "doc.plaintext"),
-                ("Markdown", "md", "number"),
-                ("Word 文档", "docx", "doc.richtext"),
-                ("Excel 表格", "xlsx", "tablecells"),
-                ("PPT 演示", "pptx", "slider.horizontal.below.rectangle"),
+            // 注意:FinderSync 的菜单项会经 Finder 序列化重建,representedObject 不存活;
+            // 模板类型必须编码进 selector(FinderSync 下 target/action 可存活)
+            let templates: [(String, String, Selector, String)] = [
+                ("TXT 文本", "doc.plaintext", #selector(newTXT(_:)), "txt"),
+                ("Markdown", "number", #selector(newMD(_:)), "md"),
+                ("Word 文档", "doc.richtext", #selector(newDOCX(_:)), "docx"),
+                ("Excel 表格", "tablecells", #selector(newXLSX(_:)), "xlsx"),
+                ("PPT 演示", "slider.horizontal.below.rectangle", #selector(newPPTX(_:)), "pptx"),
             ]
-            for (title, ext, symbol) in templates {
-                let it = NSMenuItem(title: title, action: #selector(newTemplateFile(_:)), keyEquivalent: "")
+            // 字段顺序说明:上表(标题, 符号, selector, 扩展名)
+            for (title, symbol, action, _) in templates {
+                let it = NSMenuItem(title: title, action: action, keyEquivalent: "")
                 it.target = self
-                it.representedObject = ext
                 it.image = image(symbol)
                 sub.addItem(it)
             }
@@ -77,7 +85,7 @@ class FinderSync: FIFinderSync {
         let urls = controller.selectedItemURLs() ?? []
         let paths: [String]
         if urls.isEmpty {
-            guard let dir = controller.targetedURL() else { return }
+            guard let dir = controller.targetedURL() else { notify("无法定位当前文件夹"); return }
             paths = [dir.path(percentEncoded: false)]
         } else {
             paths = urls.map { $0.path(percentEncoded: false) }
@@ -87,27 +95,35 @@ class FinderSync: FIFinderSync {
         pb.setString(paths.joined(separator: "\n"), forType: .string)
     }
 
-    @objc private func newTemplateFile(_ sender: NSMenuItem) {
-        guard let ext = sender.representedObject as? String,
-              let dir = controller.targetedURL() else { return }
+    @objc private func newTXT(_ sender: NSMenuItem) { createTemplate("txt") }
+    @objc private func newMD(_ sender: NSMenuItem) { createTemplate("md") }
+    @objc private func newDOCX(_ sender: NSMenuItem) { createTemplate("docx") }
+    @objc private func newXLSX(_ sender: NSMenuItem) { createTemplate("xlsx") }
+    @objc private func newPPTX(_ sender: NSMenuItem) { createTemplate("pptx") }
+
+    private func createTemplate(_ ext: String) {
+        dbg("createTemplate ext=\(ext)")
+        guard let dir = controller.targetedURL() else { dbg("targetedURL 为 nil"); notify("无法定位当前文件夹"); return }
+        dbg("dir=\(dir.path) ext=\(ext)")
         let name = PathUtils.uniqueName(in: dir, base: "未命名文件", ext: ext)
         let dst = dir.appendingPathComponent(name)
         let fm = FileManager.default
         if ["docx", "xlsx", "pptx"].contains(ext) {
             guard let src = Bundle.main.url(forResource: "template", withExtension: ext) else {
-                notify("缺少模板文件:\(ext)"); return
+                dbg("模板缺失: \(ext)"); notify("缺少模板文件:\(ext)"); return
             }
-            do { try fm.copyItem(at: src, to: dst) } catch { notify("创建失败:\(error.localizedDescription)"); return }
+            dbg("模板 src=\(src.path)")
+            do { try fm.copyItem(at: src, to: dst) } catch { dbg("copyItem 失败: \(error)"); notify("创建失败:\(error.localizedDescription)"); return }
         } else {
-            guard fm.createFile(atPath: dst.path, contents: Data()) else {
-                notify("创建失败:\(name)"); return
-            }
+            let ok = fm.createFile(atPath: dst.path, contents: Data())
+            dbg("createFile(\(dst.path)) = \(ok)")
+            guard ok else { notify("创建失败:\(name)"); return }
         }
         NSWorkspace.shared.activateFileViewerSelecting([dst])
     }
 
     @objc private func newFolder(_ sender: NSMenuItem) {
-        guard let dir = controller.targetedURL() else { return }
+        guard let dir = controller.targetedURL() else { notify("无法定位当前文件夹"); return }
         let name = PathUtils.uniqueName(in: dir, base: "未命名文件夹", ext: "")
         let dst = dir.appendingPathComponent(name)
         do {
@@ -119,7 +135,7 @@ class FinderSync: FIFinderSync {
     }
 
     @objc private func folderFromName(_ sender: NSMenuItem) {
-        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
+        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
         let fm = FileManager.default
         for url in urls {
             let stem = url.deletingPathExtension().lastPathComponent
@@ -134,14 +150,14 @@ class FinderSync: FIFinderSync {
     }
 
     @objc private func copyName(_ sender: NSMenuItem) {
-        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
+        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
         let pb = NSPasteboard.general
         pb.clearContents()
         pb.setString(urls.map { $0.lastPathComponent }.joined(separator: "\n"), forType: .string)
     }
 
     @objc private func cutFiles(_ sender: NSMenuItem) {
-        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
+        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
         let pb = NSPasteboard.general
         pb.declareTypes([NSPasteboard.PasteboardType("NSFilenamesPboardType"),
                          NSPasteboard.PasteboardType("com.apple.finder.cut-for-board")], owner: nil)
@@ -153,7 +169,7 @@ class FinderSync: FIFinderSync {
     }
 
     @objc private func compressZip(_ sender: NSMenuItem) {
-        guard let urls = controller.selectedItemURLs(), let first = urls.first else { return }
+        guard let urls = controller.selectedItemURLs(), let first = urls.first else { notify("未选中任何项目"); return }
         let dir = first.deletingLastPathComponent()
         let out = dir.appendingPathComponent(
             PathUtils.uniqueName(in: dir, base: baseName(first), ext: "zip"))
@@ -174,7 +190,7 @@ class FinderSync: FIFinderSync {
     }
 
     @objc private func compress7z(_ sender: NSMenuItem) {
-        guard let urls = controller.selectedItemURLs(), let first = urls.first else { return }
+        guard let urls = controller.selectedItemURLs(), let first = urls.first else { notify("未选中任何项目"); return }
         guard let seven = locate7z() else {
             notify("未找到 7zz/7za,请执行:brew install p7zip"); return
         }
@@ -194,7 +210,7 @@ class FinderSync: FIFinderSync {
     }
 
     @objc private func grantWrite(_ sender: NSMenuItem) {
-        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
+        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
         // 顶层条目粒度计数:makeWritable 返回的是节点数(文件夹计入全部后代),
         // 直接累加会与 urls.count 口径错位,文件夹全成功也会误报「部分失败」
         var ok = 0
@@ -223,12 +239,26 @@ class FinderSync: FIFinderSync {
     }
 
     private func openInApp(action: String) {
-        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { return }
+        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
         guard let url = ActionPayload(action: action,
                                       paths: urls.map { $0.path(percentEncoded: false) }).makeURL() else {
             notify("无法构造动作 URL"); return
         }
-        if !NSWorkspace.shared.open(url) {
+        // 沙盒扩展内 NSWorkspace.open(自定义 scheme) 会让 LS 弹「选择应用」框:
+        // LS 按扩展 bundle 查 claim 查不到(claim 挂在主 App)。改为显式指定主 App 打开
+        let appexPath = Bundle.main.bundlePath
+        if appexPath.hasSuffix(".appex") {
+            var ns = (appexPath as NSString)
+            ns = (ns.deletingLastPathComponent) as NSString  // PlugIns
+            ns = (ns.deletingLastPathComponent) as NSString  // Contents
+            ns = (ns.deletingLastPathComponent) as NSString  // 主 App .app
+            let appURL = URL(fileURLWithPath: ns as String)
+            let config = NSWorkspace.OpenConfiguration()
+            config.createsNewApplicationInstance = false
+            NSWorkspace.shared.open([url], withApplicationAt: appURL, configuration: config) { _, error in
+                if let error { NSLog("[RCK] 唤起主 App 失败: \(error)") }
+            }
+        } else if !NSWorkspace.shared.open(url) {
             notify("无法唤起主 App,请先运行一次 RightClickKit")
         }
     }
@@ -237,13 +267,25 @@ class FinderSync: FIFinderSync {
     @objc private func batchRename(_ sender: NSMenuItem) { openInApp(action: "batch-rename") }
     @objc private func fixMojibake(_ sender: NSMenuItem) { openInApp(action: "fix-mojibake") }
 
+    private func dbg(_ s: String) {
+        NSLog("[RCK] %@", s)
+        let path = NSTemporaryDirectory() + "rck-debug.log"
+        let line = "\(Date()) \(s)\n"
+        if let fh = FileHandle(forWritingAtPath: path) {
+            fh.seekToEndOfFile(); fh.write(line.data(using: String.Encoding.utf8)!); fh.closeFile()
+        } else {
+            try? line.write(toFile: path, atomically: true, encoding: String.Encoding.utf8)
+        }
+    }
+
     private func notify(_ message: String) {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-        let escaped = message.replacingOccurrences(of: "\\", with: "\\\\")
-            .replacingOccurrences(of: "\"", with: "\\\"")
-            .components(separatedBy: .newlines).joined(separator: " ") // AppleScript 字面量不允许裸换行(覆盖 \r、\r\n、\n 及 Unicode 行分隔符)
-        p.arguments = ["-e", "display notification \"\(escaped)\" with title \"RightClickKit\""]
-        try? p.run()
+        dbg("notify: \(message)")
+        let content = UNMutableNotificationContent()
+        content.title = "RightClickKit"
+        content.body = message.components(separatedBy: .newlines).joined(separator: " ")
+        let req = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
+        UNUserNotificationCenter.current().add(req) { err in
+            if let err { NSLog("[RCK] notify add 失败: \(err)") }
+        }
     }
 }
