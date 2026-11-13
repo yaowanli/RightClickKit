@@ -20,4 +20,16 @@ func runPathUtilsTests() {
         }
         expectEqual(PathUtils.uniqueName(in: dir, base: "草稿", ext: ""), "草稿 3")
     }
+    test("PathUtils:同名悬空符号链接也算冲突") {
+        let dir = try makeTempDir()
+        let link = dir.appendingPathComponent("a.txt")
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "/nonexistent-rck-target")
+        let name = PathUtils.uniqueName(in: dir, base: "a", ext: "txt")
+        expectEqual(name, "a 2.txt")
+    }
+    test("PathUtils:目录存在也算冲突(回归)") {
+        let dir = try makeTempDir()
+        try FileManager.default.createDirectory(at: dir.appendingPathComponent("未命名文件夹"), withIntermediateDirectories: false)
+        expectEqual(PathUtils.uniqueName(in: dir, base: "未命名文件夹", ext: ""), "未命名文件夹 2")
+    }
 }
