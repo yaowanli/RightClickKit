@@ -99,6 +99,8 @@ struct MojibakeFixView: View {
                 } else {
                     fixedCount = okCount
                     done = true
+                    // 成功后短暂展示绿色胶囊再自动关窗(对齐彻底删除浮层);失败不关,保留重试路径
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) { closeWindow() }
                 }
             }
         }
