@@ -37,6 +37,20 @@ func runFileOpsTests() {
         expectEqual(try String(contentsOf: final, encoding: .utf8), "1")
         expectEqual(try String(contentsOf: dst, encoding: .utf8), "2")
     }
+    test("FileOps:目标为悬空符号链接时避让且链接保留") {
+        let dir = try makeTempDir()
+        let link = dir.appendingPathComponent("x.txt")
+        try FileManager.default.createSymbolicLink(atPath: link.path, withDestinationPath: "/nonexistent-rck-target")
+        let srcDir = try makeTempDir()
+        let a = srcDir.appendingPathComponent("a.txt")
+        try Data("1".utf8).write(to: a)
+        let final = try FileOps.moveWithoutClobber(from: a, to: link)
+        expectEqual(final.lastPathComponent, "x 2.txt")
+        // 链接原样保留(lstat 不跟随链接,确认类型与指向均未变)
+        let attrs = try FileManager.default.attributesOfItem(atPath: link.path)
+        expectEqual(attrs[.type] as? FileAttributeType, .typeSymbolicLink)
+        expectEqual(try FileManager.default.destinationOfSymbolicLink(atPath: link.path), "/nonexistent-rck-target")
+    }
     test("FileOps:授权限解除锁定并加 u+w") {
         let dir = try makeTempDir()
         let f = dir.appendingPathComponent("y.txt")

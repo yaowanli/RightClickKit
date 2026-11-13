@@ -5,7 +5,7 @@ public enum FileOps {
     @discardableResult
     public static func moveWithoutClobber(from: URL, to: URL) throws -> URL {
         let fm = FileManager.default
-        guard fm.fileExists(atPath: to.path) else {
+        guard PathUtils.pathOccupied(to.path) else {
             try fm.moveItem(at: from, to: to)
             return to
         }
@@ -14,7 +14,7 @@ public enum FileOps {
         let base = ext.isEmpty ? to.lastPathComponent : String(to.lastPathComponent.dropLast(ext.count + 1))
         var i = 2
         var candidate = to
-        while fm.fileExists(atPath: candidate.path) {
+        while PathUtils.pathOccupied(candidate.path) {
             let stem = "\(base) \(i)"
             candidate = dir.appendingPathComponent(ext.isEmpty ? stem : "\(stem).\(ext)")
             i += 1
