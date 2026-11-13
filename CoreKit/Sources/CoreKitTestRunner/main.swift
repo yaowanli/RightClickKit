@@ -1,6 +1,8 @@
 import Foundation
 
 runPathUtilsTests()
+runPathPolicyTests()
+runActionAuthTests()
 runFileWalkerTests()
 runMojibakeTests()
 runRenameTests()

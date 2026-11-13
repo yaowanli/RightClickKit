@@ -20,6 +20,7 @@
 		BB000000000000000000000B /* template.xlsx in Resources */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000027; };
 		BB000000000000000000000C /* DeleteConfirmPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000001A; };
 		BB000000000000000000000D /* Zipper.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000001B; };
+		BB000000000000000000001D /* ActionGate.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000000001C; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,6 +34,7 @@
 		BB0000000000000000000017 /* PathUtils.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PathUtils.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/PathUtils.swift"; sourceTree = "<absolute>"; };
 		BB0000000000000000000018 /* RenameRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RenameRules.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/RenameRules.swift"; sourceTree = "<absolute>"; };
 		BB000000000000000000001B /* Zipper.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Zipper.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/Zipper.swift"; sourceTree = "<absolute>"; };
+		BB000000000000000000001C /* ActionGate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ActionGate.swift; path = "/Users/yaowl/orca/projects/mac-右键快捷键/CoreKit/Sources/CoreKit/ActionGate.swift"; sourceTree = "<absolute>"; };
 		BB0000000000000000000019 /* FinderSyncExt.appex */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = FinderSyncExt.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB0000000000000000000020 /* Ext-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = "Ext-Info.plist"; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext-Info.plist"; sourceTree = "<absolute>"; };
 		BB0000000000000000000021 /* Ext.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = "Ext.entitlements"; path = "/Users/yaowl/orca/projects/mac-右键快捷键/Resources/Ext.entitlements"; sourceTree = "<absolute>"; };
@@ -136,6 +138,7 @@
 				BB0000000000000000000007 /* PathUtils.swift in Sources */,
 				BB0000000000000000000008 /* RenameRules.swift in Sources */,
 				BB000000000000000000000D /* Zipper.swift in Sources */,
+				BB000000000000000000001D /* ActionGate.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
