@@ -15,6 +15,10 @@ func runPathPolicyTests() {
     test("PathPolicy:库类后缀被拒") {
         expectTrue(!PathPolicy.rejected(in: ["/Users/x/Pictures/相册.photoslibrary"]).isEmpty, "photoslibrary 应拒")
     }
+    test("PathPolicy:库包后代与尾斜杠也被拒(整包保护)") {
+        expectTrue(!PathPolicy.rejected(in: ["/Users/x/Pictures/a.photoslibrary/database/Photos.sqlite"]).isEmpty, "包内后代应拒")
+        expectTrue(!PathPolicy.rejected(in: ["/Users/x/Pictures/a.photoslibrary/"]).isEmpty, "尾斜杠应拒")
+    }
     test("PathPolicy:Time Machine 组件被拒") {
         expectTrue(!PathPolicy.rejected(in: ["/Volumes/BK/backups.backupdb/Mac/Latest"]).isEmpty, "backupdb 应拒")
         expectTrue(!PathPolicy.rejected(in: ["/Volumes/.timemachine/xyz"]).isEmpty, ".timemachine 应拒")
@@ -44,8 +48,10 @@ func runActionAuthTests() {
     test("ActionAuth:过期票据失败") {
         let dir = try makeTempDir()
         let file = dir.appendingPathComponent("action-nonce.json")
-        _ = ActionAuth.issueNonce(at: file, issuedAt: Date().addingTimeInterval(-60))
-        expectTrue(!ActionAuth.consume("anything", at: file), "过期票据应拒")
+        guard let n = ActionAuth.issueNonce(at: file, issuedAt: Date().addingTimeInterval(-60)) else {
+            expectTrue(false, "签发失败"); return
+        }
+        expectTrue(!ActionAuth.consume(n, at: file), "nonce 匹配但超时应失败")
     }
     test("ActionAuth:0600 权限") {
         let dir = try makeTempDir()

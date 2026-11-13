@@ -27,7 +27,8 @@ public enum PathPolicy {
             let base = "\(home)/\(rel.lowercased())"
             if path == base || path.hasPrefix("\(base)/") { return true }
         }
-        for suffix in suffixes where path.hasSuffix(suffix) { return true }
+        for suffix in suffixes
+        where path.split(separator: "/").contains(where: { $0.hasSuffix(suffix) }) { return true }
         for comp in components where path.split(separator: "/").contains(Substring(comp)) { return true }
         return false
     }
@@ -63,8 +64,13 @@ public enum ActionAuth {
         try? FileManager.default.createDirectory(
             at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
         do {
-            try data.write(to: file, options: .atomic)
-            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: file.path)
+            // 先写同目录临时名并立刻 0600,再 rename(同分区原子且权限随行),
+            // 避免「先 0644 落盘后 chmod」的权限窗口
+            let tmp = file.deletingLastPathComponent().appendingPathComponent(UUID().uuidString)
+            try data.write(to: tmp, options: .atomic)
+            try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: tmp.path)
+            try? FileManager.default.removeItem(at: file) // 覆盖旧值语义:moveItem 遇已存在目标会抛错
+            try FileManager.default.moveItem(at: tmp, to: file)
             return ticket.n
         } catch { return nil }
     }
