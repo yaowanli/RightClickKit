@@ -71,6 +71,7 @@ final class DeleteConfirmPanel: NSObject, NSWindowDelegate {
             guard let self, !self.model.working else { return }
             self.close()
         }
+        model.onConfirm = { [weak self] in self?.confirm() }
         // 错误提示/完成胶囊会改变高度:内容变化后按新布局量高(底边不动,不重置用户拖放的位置)
         model.objectWillChange
             .receive(on: DispatchQueue.main)
