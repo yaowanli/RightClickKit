@@ -13,7 +13,7 @@ public enum PathUtils {
     }
 
     /// 路径是否已占用:lstat 语义(attributesOfItem 不跟随符号链接),
-    /// 同名悬空链接也算占用,避免被 createFile/moveItem 顶掉;
+    /// 同名悬空链接也算占用——防 createFile 把链接顶掉、防 moveItem/copyItem 因 516 假失败;
     /// 仅「无此文件」(NSFileReadNoSuchFileError=260 / NSFileNoSuchFileError=4)视为空闲,
     /// 其余错误(如父目录无权限 257)按占用避让——误判占用只跳号,误判空闲会覆盖。
     static func pathOccupied(_ path: String) -> Bool {
