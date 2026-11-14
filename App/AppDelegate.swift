@@ -41,11 +41,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        ServicesProvider.register()
         // 下个 runloop 再判定（文档规定 open URL 事件在 didFinishLaunching 前后送达）：
-        // 右键动作唤起的启动不弹设置窗，避免动作窗后面垫着一个设置窗；
+        // 右键动作/服务唤起的启动不弹设置窗，避免动作窗后面垫着一个设置窗；
         // 普通启动（首次使用/双击）才显示设置
         DispatchQueue.main.async {
-            guard !self.launchedByActionURL else { return }
+            guard !self.launchedByActionURL, !ServicesProvider.hadInvocation else { return }
             SettingsWindow.shared.show()
         }
     }
