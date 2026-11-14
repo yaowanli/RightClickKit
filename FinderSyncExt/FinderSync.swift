@@ -77,7 +77,17 @@ class FinderSync: FIFinderSync {
         add(to: menu, flags: flags, feature: .compressZip, action: #selector(compressZip(_:)))
         add(to: menu, flags: flags, feature: .compress7z, action: #selector(compress7z(_:)))
         add(to: menu, flags: flags, feature: .grantWrite, action: #selector(grantWrite(_:)))
-        add(to: menu, flags: flags, feature: .deleteForever, action: #selector(deleteForever(_:)))
+        // Option 在菜单构建时读一次:跳过确认变体的标题与 selector 由同一状态决定,
+        // 防标题与行为分叉(菜单进 Finder 后扩展无法再改)
+        if flags[.deleteForever] ?? true {
+            let skip = Self.optionKeyDown
+            let item = NSMenuItem(title: skip ? "彻底删除(跳过确认)" : Feature.deleteForever.title,
+                                  action: skip ? #selector(deleteForeverSkip(_:)) : #selector(deleteForever(_:)),
+                                  keyEquivalent: "")
+            item.target = self
+            item.image = image(Feature.deleteForever.icon)
+            menu.addItem(item)
+        }
         add(to: menu, flags: flags, feature: .batchRename, action: #selector(batchRename(_:)))
         add(to: menu, flags: flags, feature: .fixMojibake, action: #selector(fixMojibake(_:)))
         return menu
@@ -404,6 +414,31 @@ class FinderSync: FIFinderSync {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
         // 确认浮层由扩展直接弹出并执行删除,不唤起主 App(轻确认场景下沉到扩展)
         DeleteConfirmPanel.present(urls: urls)
+    }
+
+    /// 菜单构建时刻的 Option 键状态(双路兜底:class 属性优先,再取当前事件)
+    private static var optionKeyDown: Bool {
+        NSEvent.modifierFlags.contains(.option)
+            || NSApp.currentEvent?.modifierFlags.contains(.option) == true
+    }
+
+    /// Option+右键 = 跳过确认直接删除(标题已明示);删除在后台执行,完成发通知
+    @objc private func deleteForeverSkip(_ sender: NSMenuItem) {
+        guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
+        DispatchQueue.global(qos: .userInitiated).async {
+            var firstError: String?
+            for t in urls {
+                do { try FileManager.default.removeItem(at: t) }
+                catch { if firstError == nil { firstError = error.localizedDescription } }
+            }
+            DispatchQueue.main.async {
+                if let e = firstError {
+                    self.notify("删除失败:\(e)")
+                } else {
+                    self.notify("已彻底删除 \(urls.count) 项")
+                }
+            }
+        }
     }
     @objc private func batchRename(_ sender: NSMenuItem) { openInApp(action: "batch-rename") }
     @objc private func fixMojibake(_ sender: NSMenuItem) { openInApp(action: "fix-mojibake") }
