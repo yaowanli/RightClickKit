@@ -76,12 +76,15 @@ public enum ActionAuth {
         } catch { return nil }
     }
 
-    /// 主 App 侧:校验并核销。无论成败都删票据(防陈旧票据重放)
+    /// 主 App 侧:校验并核销。nonce 匹配即删票据,无论 TTL 过没过(匹配=合法调用方已尝试,
+    /// 烧掉防重放);不匹配/不可读则保留票据——错 nonce 的探测者不知真 nonce,留着无害
+    /// (TTL 30s 兜底过期)。若失败也删,快速连点的两个 URL 被 LaunchServices 合并进一次
+    /// open 回调时,旧 URL 的 consume 会毒杀后签发的新票据,「后点为准」落空
     public static func consume(_ nonce: String, at file: URL = nonceFileURL()) -> Bool {
-        defer { try? FileManager.default.removeItem(at: file) }
         guard let data = try? Data(contentsOf: file),
               let ticket = try? JSONDecoder().decode(Ticket.self, from: data),
               ticket.n == nonce else { return false }
+        try? FileManager.default.removeItem(at: file) // 匹配即烧,防重放
         return Date().timeIntervalSince1970 - ticket.ts <= ttl
     }
 }

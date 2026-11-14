@@ -219,7 +219,9 @@ class FinderSync: FIFinderSync {
         guard let mainID = hostAppURL().flatMap({ Bundle(url: $0)?.bundleIdentifier }), !mainID.isEmpty,
           !NSRunningApplication.runningApplications(withBundleIdentifier: mainID).isEmpty else { return }
         guard let nonce = ActionAuth.issueNonce(),
-          let hint = ActionPayload(action: "rename-hint", paths: []).makeURL(nonce: nonce) else { return }
+          let hint = ActionPayload(action: "rename-hint", paths: []).makeURL(nonce: nonce) else {
+            dbg("nonce 签发或 URL 构造失败,跳过自动重命名"); return
+        }
         openURLWithHostApp(hint, activates: false)
     }
 
@@ -378,7 +380,7 @@ class FinderSync: FIFinderSync {
         guard let nonce = ActionAuth.issueNonce(),
           let url = ActionPayload(action: action,
                                   paths: urls.map { $0.path(percentEncoded: false) }).makeURL(nonce: nonce) else {
-            notify("无法构造动作 URL"); return
+            notify("无法签发动作凭据,请重试"); return
         }
         openURLWithHostApp(url, activates: true)
     }

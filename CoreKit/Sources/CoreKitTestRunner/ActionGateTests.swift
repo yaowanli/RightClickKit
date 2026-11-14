@@ -44,12 +44,29 @@ func runActionAuthTests() {
         expectTrue(!FileManager.default.fileExists(atPath: file.path), "核销后票据应删除")
         expectTrue(!ActionAuth.consume(n, at: file), "票据已删,重放应失败")
     }
-    test("ActionAuth:错 nonce 失败且票据被清") {
+    test("ActionAuth:错 nonce 失败且票据保留,正确 nonce 仍可核销") {
         let dir = try makeTempDir()
         let file = dir.appendingPathComponent("action-nonce.json")
-        _ = ActionAuth.issueNonce(at: file)
+        guard let n = ActionAuth.issueNonce(at: file) else { expectTrue(false, "签发失败"); return }
         expectTrue(!ActionAuth.consume("wrong", at: file), "错 nonce 应拒")
-        expectTrue(!FileManager.default.fileExists(atPath: file.path), "失败也应清票据")
+        expectTrue(FileManager.default.fileExists(atPath: file.path), "不匹配应保留票据")
+        expectTrue(ActionAuth.consume(n, at: file), "保留的票据可被正确 nonce 核销(双击合并旧 URL 不毒杀新票据)")
+    }
+    test("ActionPayload:makeURL 带 nonce 含 n= 参数且 parse 往返不受影响") {
+        let p = ActionPayload(action: "batch-rename", paths: ["/tmp/中 文/a.txt"])
+        guard let url = p.makeURL(nonce: "N-abc-123") else {
+            expectTrue(false, "makeURL 不应返回 nil"); return
+        }
+        expectTrue(url.query?.contains("n=") == true, "URL 应含 n= 参数")
+        expectEqual(ActionPayload.parse(url), p)
+    }
+    test("ActionPayload:makeURL 不带 nonce 不含 n= 参数") {
+        let p = ActionPayload(action: "rename-hint", paths: [])
+        guard let url = p.makeURL() else {
+            expectTrue(false, "makeURL 不应返回 nil"); return
+        }
+        expectTrue(url.query?.contains("n=") != true, "无 nonce 时不应含 n= 参数")
+        expectEqual(ActionPayload.parse(url), p)
     }
     test("ActionAuth:过期票据失败") {
         let dir = try makeTempDir()
