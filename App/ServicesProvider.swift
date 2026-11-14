@@ -33,9 +33,22 @@ final class ServicesProvider: NSObject {
         NSLog("[RCK] 服务调用 \(name) items=\(count)")
     }
 
+    /// Services 与 open-URL 同为主 App 外部入口:同过 PathPolicy,不搬运 FDA 敏感目录。
+    /// 全有全无语义:任一路径被拒即整批拒绝(与 open-URL 门禁「整批不执行」口径一致)。
+    /// 返回被拒路径的文件名,空表示全部放行
+    private static func rejected(_ urls: [URL]) -> [String] {
+        PathPolicy.rejected(in: urls.map { $0.path(percentEncoded: false) })
+            .map { ($0 as NSString).lastPathComponent }
+    }
+
     @objc func rckBatchRename(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let urls = fileURLs(from: pboard)
         guard !urls.isEmpty else { return }
+        let blocked = Self.rejected(urls)
+        guard blocked.isEmpty else {
+            NSLog("[RCK] 服务调用被 PathPolicy 拒绝: \(blocked.joined(separator: "、"))")
+            return
+        }
         Self.markInvoked("batch-rename", count: urls.count)
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
@@ -46,6 +59,11 @@ final class ServicesProvider: NSObject {
     @objc func rckFixMojibake(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let urls = fileURLs(from: pboard)
         guard !urls.isEmpty else { return }
+        let blocked = Self.rejected(urls)
+        guard blocked.isEmpty else {
+            NSLog("[RCK] 服务调用被 PathPolicy 拒绝: \(blocked.joined(separator: "、"))")
+            return
+        }
         Self.markInvoked("fix-mojibake", count: urls.count)
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
@@ -57,6 +75,11 @@ final class ServicesProvider: NSObject {
     @objc func rckZip(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let urls = fileURLs(from: pboard)
         guard !urls.isEmpty else { return }
+        let blocked = Self.rejected(urls)
+        guard blocked.isEmpty else {
+            NSLog("[RCK] 服务调用被 PathPolicy 拒绝: \(blocked.joined(separator: "、"))")
+            return
+        }
         Self.markInvoked("zip", count: urls.count)
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Zipper.zip(items: urls)
