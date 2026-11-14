@@ -17,7 +17,8 @@ final class ServicesProvider: NSObject {
         NSUpdateDynamicServices()
     }
 
-    /// 服务 pasteboard 只在本次调用期间有效,必须同步读取
+    /// 服务 pasteboard 只在本次调用期间有效,必须同步读取;
+    /// NSFilenamesPboardType 已废弃,但仍是 Finder 实际投递类型(Keka/iTerm2/FinderRight 同款),勿「修正」
     private func fileURLs(from pboard: NSPasteboard) -> [URL] {
         let filenames = NSPasteboard.PasteboardType("NSFilenamesPboardType")
         if let paths = pboard.propertyList(forType: filenames) as? [String], !paths.isEmpty {
@@ -27,22 +28,25 @@ final class ServicesProvider: NSObject {
         return (pboard.readObjects(forClasses: [NSURL.self], options: opts) as? [URL]) ?? []
     }
 
-    private static func markInvoked() { hadInvocation = true }
+    private static func markInvoked(_ name: String, count: Int) {
+        hadInvocation = true
+        NSLog("[RCK] 服务调用 \(name) items=\(count)")
+    }
 
-    @objc func rckBatchRename(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        Self.markInvoked()
+    @objc func rckBatchRename(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let urls = fileURLs(from: pboard)
         guard !urls.isEmpty else { return }
+        Self.markInvoked("batch-rename", count: urls.count)
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
             BatchRenameView.show(urls: urls)
         }
     }
 
-    @objc func rckFixMojibake(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        Self.markInvoked()
+    @objc func rckFixMojibake(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let urls = fileURLs(from: pboard)
         guard !urls.isEmpty else { return }
+        Self.markInvoked("fix-mojibake", count: urls.count)
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
             MojibakeFixView.show(urls: urls)
@@ -50,18 +54,19 @@ final class ServicesProvider: NSObject {
     }
 
     /// 压缩会 fork 子进程并等待,放后台;完成后选中产物(与扩展内行为一致)
-    @objc func rckZip(_ pboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString>) {
-        Self.markInvoked()
+    @objc func rckZip(_ pboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>?) {
         let urls = fileURLs(from: pboard)
         guard !urls.isEmpty else { return }
+        Self.markInvoked("zip", count: urls.count)
         DispatchQueue.global(qos: .userInitiated).async {
             let result = Zipper.zip(items: urls)
             DispatchQueue.main.async {
                 switch result {
                 case .success(let url):
-                    NSApp.activate(ignoringOtherApps: true)
                     NSWorkspace.shared.activateFileViewerSelecting([url])
                 case .failure(let f):
+                    // 服务调用时主 App 不一定在前台,不激活则 runModal 面板可能被压在后面
+                    NSApp.activate(ignoringOtherApps: true)
                     let alert = NSAlert()
                     alert.messageText = "压缩失败"
                     alert.informativeText = f.message
