@@ -180,15 +180,12 @@ final class DeleteConfirmPanel: NSObject, NSWindowDelegate {
         let targets = urls
         let gen = generation
         DispatchQueue.global(qos: .userInitiated).async { [weak self, model] in
-            var firstError: String?
-            for t in targets {
-                do { try FileManager.default.removeItem(at: t) }
-                catch { if firstError == nil { firstError = error.localizedDescription } }
-            }
+            let r = FileOps.removeAll(targets)
             DispatchQueue.main.async {
                 guard let self, self.generation == gen else { return } // 批次已换,不让旧删除写新批次状态
                 model.working = false
-                if let e = firstError {
+                // 部分成功也如实报数,避免「删除失败」让用户误以为什么都没删
+                if let e = r.firstError.map({ "已删除 \(r.deleted) 项,失败:\($0)" }) {
                     model.error = e
                 } else {
                     model.done = true

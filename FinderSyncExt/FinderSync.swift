@@ -426,20 +426,17 @@ class FinderSync: FIFinderSync {
     @objc private func deleteForeverSkip(_ sender: NSMenuItem) {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
         DispatchQueue.global(qos: .userInitiated).async {
-            var firstError: String?
-            for t in urls {
-                do { try FileManager.default.removeItem(at: t) }
-                catch { if firstError == nil { firstError = error.localizedDescription } }
-            }
+            let r = FileOps.removeAll(urls)
             DispatchQueue.main.async {
-                if let e = firstError {
-                    self.notify("删除失败:\(e)")
+                if let e = r.firstError {
+                    self.notify("已删除 \(r.deleted) 项,失败:\(e)")
                 } else {
                     self.notify("已彻底删除 \(urls.count) 项")
                 }
             }
         }
     }
+
     @objc private func batchRename(_ sender: NSMenuItem) { openInApp(action: "batch-rename") }
     @objc private func fixMojibake(_ sender: NSMenuItem) { openInApp(action: "fix-mojibake") }
 

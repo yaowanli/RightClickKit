@@ -63,4 +63,31 @@ func runFileOpsTests() {
         expectEqual(perms & 0o200, Int16(0o200))
         expectEqual(attrs[.immutable] as? Bool, false)
     }
+    test("FileOps:removeAll 全部成功") {
+        let dir = try makeTempDir()
+        var files: [URL] = []
+        for name in ["a.txt", "b.txt", "c.txt"] {
+            let f = dir.appendingPathComponent(name)
+            try Data("1".utf8).write(to: f)
+            files.append(f)
+        }
+        let r = FileOps.removeAll(files)
+        expectEqual(r.deleted, 3)
+        expectEqual(r.firstError, nil)
+        expectTrue(files.allSatisfy { !FileManager.default.fileExists(atPath: $0.path) }, "三项都应已不存在")
+    }
+    test("FileOps:removeAll 部分失败不中断") {
+        let dir = try makeTempDir()
+        let a = dir.appendingPathComponent("a.txt")
+        let b = dir.appendingPathComponent("b.txt")
+        try Data("1".utf8).write(to: a)
+        try Data("2".utf8).write(to: b)
+        let ghost = dir.appendingPathComponent("not-existed.txt")
+        // 不存在的路径夹在中间:验证单项失败后继续删后续项
+        let r = FileOps.removeAll([a, ghost, b])
+        expectEqual(r.deleted, 2)
+        expectTrue(r.firstError != nil, "首个错误不应为 nil")
+        expectTrue(!FileManager.default.fileExists(atPath: a.path)
+            && !FileManager.default.fileExists(atPath: b.path), "失败后仍应删完剩余项")
+    }
 }

@@ -41,4 +41,16 @@ public enum FileOps {
         }
         return ok
     }
+
+    /// 批量彻底删除:逐项 removeItem,单项失败不中断;返回成功数与首个错误。
+    /// 调用方按口径报「已删除 N 项,失败:M 项」类文案,避免部分成功被误读为全失败
+    public static func removeAll(_ urls: [URL]) -> (deleted: Int, firstError: String?) {
+        var deleted = 0
+        var firstError: String?
+        for u in urls {
+            do { try FileManager.default.removeItem(at: u); deleted += 1 }
+            catch { if firstError == nil { firstError = error.localizedDescription } }
+        }
+        return (deleted, firstError)
+    }
 }
