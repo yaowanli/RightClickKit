@@ -11,10 +11,19 @@ enum FinderRestarter {
         let prev = UserDefaults.standard.string(forKey: key)
         UserDefaults.standard.set(cur, forKey: key)
         guard let prev, prev != cur else { return } // 首次运行只记录,不重启
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
-        p.arguments = ["Finder"]
-        try? p.run()
-        NSLog("[RCK] 版本 \(prev)→\(cur),已重启 Finder 刷新扩展注册")
+        // 延迟 3 秒:升级后用户第一次右键会经扩展唤起主 App,此刻正握着 Finder 菜单,
+        // 同步 killall 会当场杀掉它。marker 已在上方同步写入,App 若在延迟内退出,
+        // 这次重启随进程一起丢——但 marker 已一致,下次启动也不会重复杀,可接受
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/usr/bin/killall")
+            p.arguments = ["Finder"]
+            do {
+                try p.run()
+                NSLog("[RCK] 版本 \(prev)→\(cur),已重启 Finder 刷新扩展注册")
+            } catch {
+                NSLog("[RCK] killall 启动失败: \(error)")
+            }
+        }
     }
 }
