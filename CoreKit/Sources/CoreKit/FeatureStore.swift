@@ -14,6 +14,11 @@ public enum Feature: String, CaseIterable {
     case deleteForever = "delete-forever"
     case batchRename = "batch-rename"
     case fixMojibake = "fix-mojibake"
+    case externalVolumes = "external-volumes"
+
+    /// 默认关的开关(用户决策):观察卷根会让 Finder 把侧边栏图标换成本 App 图标。
+    /// features.json 里未写入的 case 取 !defaultsOff 作缺省值,两端(设置页/扩展)一致
+    public var defaultsOff: Bool { self == .externalVolumes }
 
     public var title: String {
         switch self {
@@ -30,6 +35,7 @@ public enum Feature: String, CaseIterable {
         case .deleteForever: return "彻底删除"
         case .batchRename: return "批量重命名"
         case .fixMojibake: return "修复乱码文件名"
+        case .externalVolumes: return "外接卷支持"
         }
     }
 
@@ -49,6 +55,7 @@ public enum Feature: String, CaseIterable {
         case .deleteForever: return "trash"
         case .batchRename: return "character.textbox"
         case .fixMojibake: return "wand.and.stars"
+        case .externalVolumes: return "externaldrive"
         }
     }
 
@@ -68,6 +75,7 @@ public enum Feature: String, CaseIterable {
         case .deleteForever: return "不进废纸篓直接删除,不可恢复"
         case .batchRename: return "前缀/后缀/序号/查找替换四种规则"
         case .fixMojibake: return "检测 GBK↔UTF-8 乱码文件名并逐项改名"
+        case .externalVolumes: return "在 U 盘/移动硬盘等外接卷内提供右键菜单(开启后该卷侧边栏图标会显示为 RightClickKit 图标)"
         }
     }
 }
@@ -99,12 +107,12 @@ public enum FeatureStore {
     public static func flags() -> [Feature: Bool] {
         let dict = load()
         var out: [Feature: Bool] = [:]
-        for f in Feature.allCases { out[f] = dict[f.rawValue] ?? true }
+        for f in Feature.allCases { out[f] = dict[f.rawValue] ?? !f.defaultsOff }
         return out
     }
 
     public static func isEnabled(_ f: Feature) -> Bool {
-        load()[f.rawValue] ?? true
+        load()[f.rawValue] ?? !f.defaultsOff
     }
 
     public static func setEnabled(_ f: Feature, _ on: Bool) {

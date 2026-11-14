@@ -166,6 +166,9 @@ class FinderSync: FIFinderSync {
     @objc private func volumeDidMount(_ n: Notification) { mergeMountedVolumes() }
 
     private func mergeMountedVolumes() {
+        // 默认关闭(用户决策):观察卷根会让 Finder 把侧边栏图标换成本 App 图标;
+        // 设置页「外接卷支持」打开后才注册,init 与 didMount 各自经此处自检
+        guard FeatureStore.flags()[.externalVolumes] ?? false else { return }
         guard let vols = FileManager.default.mountedVolumeURLs(
             includingResourceValuesForKeys: [.volumeIsReadOnlyKey], options: [.skipHiddenVolumes]) else { return }
         var add: Set<URL> = []

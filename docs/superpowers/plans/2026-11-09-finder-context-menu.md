@@ -2316,3 +2316,14 @@ git commit -m "docs: README 使用说明"
 | 7 | UX:CFBundleVersion 变化延迟 3s 重启 Finder 一次 | FinderRight FinderRestarter |
 
 评审实录:每个任务经实现→规格评审→质量评审双门;SIGPIPE 竞态(grep -q 管道早退 × pipefail)在 T8/T9 两处实测抓出并以去管道化修复;-nobrowse 挂载的卷带隐藏标记会被 skipHiddenVolumes 过滤(T10 实测,验收勿用)。
+
+### 修订 21(2026-11-14):外接卷支持默认关闭
+
+用户决策:观察卷根的侧边栏图标代价暂不接受,外接卷注册改为 Feature 开关
+`external-volumes`(默认关,设置页可开),mergeMountedVolumes 自检 FeatureStore;
+关闭路径与开启路径均验证(挂载 DMG 实测 beginObserving 有无)。
+
+实现备注:flags()/isEnabled() 缺省值改取 `!f.defaultsOff`(Feature 新增计算属性,
+externalVolumes 为唯一默认关 case),否则设置页卡片会按旧缺省 true 显示为开、
+而扩展侧 guard 挡住,两端不一致;defaultsOff 保证设置页与扩展同源同默认。
+
