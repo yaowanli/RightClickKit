@@ -7,11 +7,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
-    // 扩展经 rightclickkit://<action>?p=... 唤起(冷启动/热启动均送达)
+    // 扩展经 rightclickkit://<action>?p=...&n=... 唤起(冷启动/热启动均送达)。
+    // scheme 可被任意进程 open:nonce 由扩展签发、此处单次核销,缺失/过期一律丢弃;
+    // 路径再过 PathPolicy,不替外部调用者搬运 FDA 敏感目录
     func application(_ application: NSApplication, open urls: [URL]) {
         launchedByActionURL = true
         for url in urls {
             guard let payload = ActionPayload.parse(url) else { continue }
+            let nonce = URLComponents(url: url, resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "n" })?.value
+            guard let nonce, ActionAuth.consume(nonce) else {
+                NSLog("[RCK] 拒绝无 nonce 或 nonce 无效的调用: \(url.host ?? "-")")
+                continue
+            }
+            let rejected = PathPolicy.rejected(in: payload.paths)
+            if !rejected.isEmpty {
+                let names = rejected.map { ($0 as NSString).lastPathComponent }.joined(separator: "、")
+                NSLog("[RCK] PathPolicy 拒绝: \(names)")
+                let alert = NSAlert()
+                alert.messageText = "已拒绝操作受保护的路径"
+                alert.informativeText = "以下路径属于系统隐私目录,RightClickKit 不处理:\n\(names)"
+                alert.runModal()
+                continue
+            }
             ActionRouter.handle(payload)
         }
     }
