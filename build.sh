@@ -91,7 +91,10 @@ LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServic
 # 版本变了或未注册时才走全量注销→强扫→注册→选举→重启 pkd
 VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist")
 MARKER="$BUILD/.registered-v$VER"
-if [ -f "$MARKER" ] && pluginkit -m | grep -q "$APP_ID.FinderSyncExt"; then
+# 捕获一次插件列表供判断;-v 才输出 appex 绝对路径,只匹配 ID 时拷贝/移动目录后
+# pluginkit 仍指旧路径,门会误通过且新路径永不注册
+PKV="$(pluginkit -m -v 2>/dev/null || true)"
+if [ -f "$MARKER" ] && printf '%s\n' "$PKV" | grep -Fq "$APP/Contents/PlugIns"; then
   echo "==> 扩展已注册且版本未变(v$VER),跳过重注册"
   pluginkit -e use -i "$APP_ID.FinderSyncExt" 2>/dev/null || true
 else
@@ -108,15 +111,17 @@ fi
 # LS 收录 appex 的可靠触发方式是启动一次主 App;pkd 选举需要 LS 先收录
 open "$APP" 2>/dev/null || true
 sleep 3
-if ! pluginkit -m | grep -q "$APP_ID.FinderSyncExt"; then
+# 刚走完注册/open,列表可能已变:重取快照供下方判断与计数(旧快照会误报未注册)
+PKV="$(pluginkit -m -v 2>/dev/null || true)"
+if ! printf '%s\n' "$PKV" | grep -Fq "$APP/Contents/PlugIns"; then
   echo "提示:扩展暂未出现在 pluginkit,请重跑本脚本。" >&2
 fi
 
 # 同 bundle ID 多拷贝注册会让 pluginkit 选举不稳定、菜单时有时无
-DUP=$(pluginkit -m | grep -c "$APP_ID.FinderSyncExt" || true)
+DUP=$(printf '%s\n' "$PKV" | grep -Fc "$APP/Contents/PlugIns" || true)
 if [ "$DUP" -gt 1 ]; then
   echo "警告:检测到 $DUP 份扩展注册(选举不稳定,菜单可能时有时无):" >&2
-  pluginkit -m | grep "$APP_ID.FinderSyncExt" >&2
+  printf '%s\n' "$PKV" | grep -F "$APP/Contents/PlugIns" >&2
   echo "请对旧路径执行:pluginkit -r <旧 .app 路径>" >&2
 fi
 
