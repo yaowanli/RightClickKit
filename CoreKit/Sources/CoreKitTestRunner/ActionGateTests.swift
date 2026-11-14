@@ -8,6 +8,12 @@ func runPathPolicyTests() {
         expectTrue(!PathPolicy.rejected(in: ["\(home)/library/mail/"]).isEmpty, "大小写不敏感")
         expectTrue(!PathPolicy.rejected(in: ["\(home)/Library/Containers/x/Data"]).isEmpty, "Containers 应拒")
     }
+    test("PathPolicy:非规范化路径也被拒(../、双斜杠、~ 展开)") {
+        let home = NSHomeDirectory()
+        expectTrue(!PathPolicy.rejected(in: ["\(home)/Desktop/../Library/Messages/chat.db"]).isEmpty, "../ 穿越应拒")
+        expectTrue(!PathPolicy.rejected(in: ["\(home)//Library/Messages/chat.db"]).isEmpty, "双斜杠应拒")
+        expectTrue(!PathPolicy.rejected(in: ["~/Library/Messages/chat.db"]).isEmpty, "~ 展开后应拒")
+    }
     test("PathPolicy:后代目录也被拒(防打包带走)") {
         let home = NSHomeDirectory()
         expectTrue(!PathPolicy.rejected(in: ["\(home)/Library/Mail/sub/file.emlx"]).isEmpty, "后代应拒")

@@ -21,7 +21,8 @@ public enum PathPolicy {
     }
 
     static func isRejected(_ raw: String) -> Bool {
-        let path = raw.lowercased()
+        // 先规范化:../、双斜杠、./ 分量会绕过前缀匹配;standardizingPath 同时展开 ~
+        let path = ((raw as NSString).standardizingPath as String).lowercased()
         let home = homeDirectory().lowercased()
         for rel in homeLibraryRestricted {
             let base = "\(home)/\(rel.lowercased())"
