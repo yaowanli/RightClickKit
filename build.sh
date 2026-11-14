@@ -80,8 +80,10 @@ fi
 echo "==> 自检(签名与 plist,先内后外)"
 codesign --verify --deep --strict "$APP/Contents/PlugIns/FinderSyncExt.appex"
 codesign --verify --deep --strict "$APP"
-# Hardened Runtime 必须真实存在(-o runtime 被忽略时静默缺失)
-codesign -dv "$APP" 2>&1 | grep -q "runtime" || { echo "错误:主 App 未启用 Hardened Runtime"; exit 1; }
+# Hardened Runtime 必须真实存在(-o runtime 被忽略时静默缺失);
+# 命令替换先收全输出:grep -q 管道会因 codesign 被 SIGPIPE 杀死(pipefail 141)而误报
+CSINFO="$(codesign -dv "$APP" 2>&1)"
+[[ "$CSINFO" == *"runtime"* ]] || { echo "错误:主 App 未启用 Hardened Runtime"; exit 1; }
 plutil -lint "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/PlugIns/FinderSyncExt.appex/Contents/Info.plist"
 
