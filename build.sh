@@ -94,7 +94,8 @@ MARKER="$BUILD/.registered-v$VER"
 # 捕获一次插件列表供判断;-v 才输出 appex 绝对路径,只匹配 ID 时拷贝/移动目录后
 # pluginkit 仍指旧路径,门会误通过且新路径永不注册
 PKV="$(pluginkit -m -v 2>/dev/null || true)"
-if [ -f "$MARKER" ] && printf '%s\n' "$PKV" | grep -Fq "$APP/Contents/PlugIns"; then
+# 原生子串判断不走管道:grep -q 命中即早退,写端 SIGPIPE 在 pipefail 下误判未注册
+if [ -f "$MARKER" ] && [[ "$PKV" == *"$APP/Contents/PlugIns"* ]]; then
   echo "==> 扩展已注册且版本未变(v$VER),跳过重注册"
   pluginkit -e use -i "$APP_ID.FinderSyncExt" 2>/dev/null || true
 else
@@ -113,15 +114,16 @@ open "$APP" 2>/dev/null || true
 sleep 3
 # 刚走完注册/open,列表可能已变:重取快照供下方判断与计数(旧快照会误报未注册)
 PKV="$(pluginkit -m -v 2>/dev/null || true)"
-if ! printf '%s\n' "$PKV" | grep -Fq "$APP/Contents/PlugIns"; then
+if [[ "$PKV" != *"$APP/Contents/PlugIns"* ]]; then
   echo "提示:扩展暂未出现在 pluginkit,请重跑本脚本。" >&2
 fi
 
 # 同 bundle ID 多拷贝注册会让 pluginkit 选举不稳定、菜单时有时无
-DUP=$(printf '%s\n' "$PKV" | grep -Fc "$APP/Contents/PlugIns" || true)
+# 按 bundle ID 计数才能抓到「旧路径+新路径」跨路径多拷贝;列表行来自 -v 快照,含绝对路径可执行清理
+DUP=$(printf '%s\n' "$PKV" | grep -Fc "$APP_ID.FinderSyncExt" || true)
 if [ "$DUP" -gt 1 ]; then
   echo "警告:检测到 $DUP 份扩展注册(选举不稳定,菜单可能时有时无):" >&2
-  printf '%s\n' "$PKV" | grep -F "$APP/Contents/PlugIns" >&2
+  printf '%s\n' "$PKV" | grep -F "$APP_ID.FinderSyncExt" >&2
   echo "请对旧路径执行:pluginkit -r <旧 .app 路径>" >&2
 fi
 
