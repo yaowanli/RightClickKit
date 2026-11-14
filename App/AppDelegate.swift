@@ -49,5 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             guard !self.launchedByActionURL, !ServicesProvider.hadInvocation else { return }
             SettingsWindow.shared.show()
         }
+
+        FinderRestarter.restartFinderIfNeeded()
     }
 }
