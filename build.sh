@@ -67,34 +67,57 @@ echo "==> 签名(先内后外,身份:$SIGN_IDENTITY)"
 if [ -n "$XB" ]; then
   # xcodebuild 产物保留其自动签名(appex 内含 app-sandbox entitlement);
   # 仅重签主 App 外壳,避免 CLI 重签覆盖扩展的合格签名
-  codesign --force --sign "$SIGN_IDENTITY" "$APP"
+  # -o runtime:Hardened Runtime,防 DYLD_INSERT_LIBRARIES 注入继承我们的辅助功能授权
+  codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP"
 else
   # appex 必须带 app-sandbox entitlement:macOS 26 的 pluginkit 静默拒绝非沙盒 Finder Sync 扩展
   codesign --force --entitlements "$ROOT/Resources/Ext.entitlements" --sign "$SIGN_IDENTITY" \
     "$APP/Contents/PlugIns/FinderSyncExt.appex"
-  codesign --force --sign "$SIGN_IDENTITY" "$APP"
+  # 主 App 同样启用 Hardened Runtime(两分支统一),否则下方自检会硬失败
+  codesign --force --options runtime --sign "$SIGN_IDENTITY" "$APP"
 fi
 
 echo "==> 自检(签名与 plist,先内后外)"
 codesign --verify --deep --strict "$APP/Contents/PlugIns/FinderSyncExt.appex"
 codesign --verify --deep --strict "$APP"
+# Hardened Runtime 必须真实存在(-o runtime 被忽略时静默缺失)
+codesign -dv "$APP" 2>&1 | grep -q "runtime" || { echo "错误:主 App 未启用 Hardened Runtime"; exit 1; }
 plutil -lint "$APP/Contents/Info.plist"
 plutil -lint "$APP/Contents/PlugIns/FinderSyncExt.appex/Contents/Info.plist"
 
 echo "==> 注册扩展"
-# LS/pkd 注册是异步的且对旧记录有缓存:注销→强扫→注册→置启用选举→重启 pkd 促进发现
 LSREG="/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister"
-pluginkit -r "$APP" 2>/dev/null || true
-"$LSREG" -f "$APP" 2>/dev/null || true
-pluginkit -a "$APP" || true
-pluginkit -e use -i "$APP_ID.FinderSyncExt" 2>/dev/null || true
-killall pkd 2>/dev/null || true
-sleep 3
+# 已注册且版本未变时跳过重注册:重复 pluginkit -a 会重启扩展并重排选举(丢角标归属);
+# 版本变了或未注册时才走全量注销→强扫→注册→选举→重启 pkd
+VER=$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist")
+MARKER="$BUILD/.registered-v$VER"
+if [ -f "$MARKER" ] && pluginkit -m | grep -q "$APP_ID.FinderSyncExt"; then
+  echo "==> 扩展已注册且版本未变(v$VER),跳过重注册"
+  pluginkit -e use -i "$APP_ID.FinderSyncExt" 2>/dev/null || true
+else
+  # LS/pkd 注册是异步的且对旧记录有缓存:注销→强扫→注册→置启用选举→重启 pkd 促进发现
+  pluginkit -r "$APP" 2>/dev/null || true
+  "$LSREG" -f "$APP" 2>/dev/null || true
+  pluginkit -a "$APP" || true
+  pluginkit -e use -i "$APP_ID.FinderSyncExt" 2>/dev/null || true
+  killall pkd 2>/dev/null || true
+  rm -f "$BUILD"/.registered-* 2>/dev/null || true
+  touch "$MARKER"
+  sleep 3
+fi
 # LS 收录 appex 的可靠触发方式是启动一次主 App;pkd 选举需要 LS 先收录
 open "$APP" 2>/dev/null || true
 sleep 3
 if ! pluginkit -m | grep -q "$APP_ID.FinderSyncExt"; then
   echo "提示:扩展暂未出现在 pluginkit,请重跑本脚本。" >&2
+fi
+
+# 同 bundle ID 多拷贝注册会让 pluginkit 选举不稳定、菜单时有时无
+DUP=$(pluginkit -m | grep -c "$APP_ID.FinderSyncExt" || true)
+if [ "$DUP" -gt 1 ]; then
+  echo "警告:检测到 $DUP 份扩展注册(选举不稳定,菜单可能时有时无):" >&2
+  pluginkit -m | grep "$APP_ID.FinderSyncExt" >&2
+  echo "请对旧路径执行:pluginkit -r <旧 .app 路径>" >&2
 fi
 
 codesign -dv "$APP" 2>&1 | head -2 || true
