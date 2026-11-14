@@ -2296,3 +2296,23 @@ git commit -m "docs: README 使用说明"
 2. **占位符扫描**:Task 6 的三个操作窗占位是刻意的中间态(该任务只求骨架可编译),Task 8-12 完整替换,不属计划缺陷。
 3. **类型一致性**:`ActionPayload(action:paths:)`、`FeatureStore.isEnabled(_:)`、`RenamePlanner.plan(names:rule:)`、`FileOps.moveWithoutClobber/makeWritable`、`PathUtils.uniqueName(in:base:ext:)`、`FileWalker.walk/totalSize` 在各任务间签名一致;action 名 `delete-forever`/`batch-rename`/`fix-mojibake` 扩展端与路由端一致。
 4. **对规格的一处修正(已说明)**:传参从 `OpenConfiguration.arguments` 改为 URL query(热启动可靠),见 Task 4 说明。
+
+---
+
+## 修订记录
+
+### 修订 20(2026-11-14):缺口修复与 Services 兜底批次
+
+二轮开源审计(FinderRight/RClick 第二眼)发现 5 个真缺口,全部修复;另落 2 项 UX。
+
+| # | 内容 | 出处 |
+|---|------|------|
+| 1 | uniqueName/FileOps 判重改 lstat:悬空符号链接不再被判不存在(防 createFile 顶掉链接/防 moveItem 516 假失败);仅 NoSuchFile(260/4)算空闲,权限错误按占用避让 | FinderRight ExclusiveRename/UniqueName |
+| 2 | ActionGate:URL 边界一次性 nonce(扩展签发→主 App 核销,匹配即烧防连点毒杀)+ PathPolicy 敏感路径拒绝(standardizingPath 堵 ../ 穿越) | FinderRight XPCEndpointBridge/PathAccessPolicy |
+| 3 | 外接卷逐卷注册:mountedVolumeURLs 并入 + didMountNotification 只并入不剔除;只读卷//System//private 排除;beginObserving/endObserving 日志 | FinderRight buildMonitoredDirectories、RClick external-volumes-observation.md |
+| 4 | NSServices 兜底三服务(批量重命名/修复乱码/压缩 ZIP):云盘 File Provider 域扩展收不到 menu(for:) 的唯一入口 | FinderRight ServicesProvider(签名 userData:String? 同款) |
+| 5 | build.sh:Hardened Runtime(-o runtime + 去管道化硬校验)/版本未变跳过重注册/多拷贝注册检查 | FinderRight build.sh/install-local.sh |
+| 6 | UX:Option+右键「彻底删除(跳过确认)」(构建时同源决定标题与 selector);部分失败口径统一 FileOps.removeAll | RClick Option 四路兜底(简化双路) |
+| 7 | UX:CFBundleVersion 变化延迟 3s 重启 Finder 一次 | FinderRight FinderRestarter |
+
+评审实录:每个任务经实现→规格评审→质量评审双门;SIGPIPE 竞态(grep -q 管道早退 × pipefail)在 T8/T9 两处实测抓出并以去管道化修复;-nobrowse 挂载的卷带隐藏标记会被 skipHiddenVolumes 过滤(T10 实测,验收勿用)。
