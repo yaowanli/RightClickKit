@@ -13,6 +13,13 @@ class FinderSync: FIFinderSync {
         super.init()
         // 监听全盘,Finder 所有文件夹的右键菜单都出现本扩展
         controller.directoryURLs.insert(URL(fileURLWithPath: "/"))
+        // 外接卷必须逐卷注册:FinderSync 观察边界按卷计算,不跨挂载点继承
+        // (RClick DMG 实测 / FinderRight 2026-10-02 实测一致);云盘是 File Provider 域,
+        // 注册也收不到回调,兜底走主 App Services(见 App/ServicesProvider.swift)
+        mergeMountedVolumes()
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self, selector: #selector(volumeDidMount(_:)),
+            name: NSWorkspace.didMountNotification, object: nil)
         // 沙盒内 osascript 发 Apple Events 被静默拒,通知走 UNUserNotificationCenter
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert]) { granted, err in
             NSLog("[RCK] 通知授权 granted=\(granted) err=\(String(describing: err))")
@@ -144,6 +151,33 @@ class FinderSync: FIFinderSync {
         return controller.targetedURL()
     }
 
+    /// 新卷挂载:只并入不剔除。卸载卷的残留路径无害;重设集合=重新注册,
+    /// 会让本扩展在重叠扩展中重新排队(RClick/FinderRight 同款取舍)
+    @objc private func volumeDidMount(_ n: Notification) { mergeMountedVolumes() }
+
+    private func mergeMountedVolumes() {
+        guard let vols = FileManager.default.mountedVolumeURLs(
+            includingResourceValuesForKeys: [.volumeIsReadOnlyKey], options: [.skipHiddenVolumes]) else { return }
+        var add: Set<URL> = []
+        for v in vols {
+            let ro = (try? v.resourceValues(forKeys: [.volumeIsReadOnlyKey]))?.volumeIsReadOnly ?? true
+            let p = v.path
+            // 只读卷不注册:观察卷根会让 Finder 把该卷侧边栏图标换成本 App 图标(RClick #155 实测);
+            // 只读的安装镜像没有可操作价值,不值得付图标代价(FinderRight 同款取舍)
+            if !ro, p != "/", !p.hasPrefix("/System"), !p.hasPrefix("/private") { add.insert(v) }
+        }
+        guard !add.isEmpty else { return }
+        let current = controller.directoryURLs ?? []
+        let merged = current.union(add)
+        guard merged != current else { return } // 集合未变化不重设
+        controller.directoryURLs = merged
+        dbg("directoryURLs 并入 \(merged.count - current.count) 个卷,共 \(merged.count) 项")
+    }
+
+    /// 观察目录起止日志:排查「某目录菜单不出现」的第一现场(配合 touch rck-debug.log)
+    override func beginObservingDirectory(at url: URL) { dbg("beginObserving \(url.path)") }
+    override func endObservingDirectory(at url: URL) { dbg("endObserving \(url.path)") }
+
     private func createTemplate(_ ext: String) {
         dbg("createTemplate ext=\(ext)")
         guard let dir = workingDirectory() else { dbg("targetedURL 为 nil"); notify("无法定位当前文件夹"); return }
@@ -184,7 +218,8 @@ class FinderSync: FIFinderSync {
         NSWorkspace.shared.activateFileViewerSelecting([url])
         guard let mainID = hostAppURL().flatMap({ Bundle(url: $0)?.bundleIdentifier }), !mainID.isEmpty,
           !NSRunningApplication.runningApplications(withBundleIdentifier: mainID).isEmpty else { return }
-        guard let hint = ActionPayload(action: "rename-hint", paths: []).makeURL() else { return }
+        guard let nonce = ActionAuth.issueNonce(),
+          let hint = ActionPayload(action: "rename-hint", paths: []).makeURL(nonce: nonce) else { return }
         openURLWithHostApp(hint, activates: false)
     }
 
@@ -340,8 +375,9 @@ class FinderSync: FIFinderSync {
 
     private func openInApp(action: String) {
         guard let urls = controller.selectedItemURLs(), !urls.isEmpty else { notify("未选中任何项目"); return }
-        guard let url = ActionPayload(action: action,
-                                      paths: urls.map { $0.path(percentEncoded: false) }).makeURL() else {
+        guard let nonce = ActionAuth.issueNonce(),
+          let url = ActionPayload(action: action,
+                                  paths: urls.map { $0.path(percentEncoded: false) }).makeURL(nonce: nonce) else {
             notify("无法构造动作 URL"); return
         }
         openURLWithHostApp(url, activates: true)

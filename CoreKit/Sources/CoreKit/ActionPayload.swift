@@ -9,14 +9,17 @@ public struct ActionPayload: Equatable {
         self.paths = paths
     }
 
-    /// rightclickkit://<action>?p=<JSON 数组,系统自动百分号编码>
-    public func makeURL() -> URL? {
+    /// rightclickkit://<action>?p=<JSON 数组>&n=<一次性 nonce>
+    /// nonce 由扩展签发(见 ActionAuth)、主 App 核销;缺 n 的 URL 会被主 App 拒绝
+    public func makeURL(nonce: String? = nil) -> URL? {
         guard let json = try? JSONEncoder().encode(paths),
               let str = String(data: json, encoding: .utf8) else { return nil }
         var comps = URLComponents()
         comps.scheme = "rightclickkit"
         comps.host = action
-        comps.queryItems = [URLQueryItem(name: "p", value: str)]
+        var items = [URLQueryItem(name: "p", value: str)]
+        if let nonce { items.append(URLQueryItem(name: "n", value: nonce)) }
+        comps.queryItems = items
         return comps.url
     }
 
