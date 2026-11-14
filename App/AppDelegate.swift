@@ -7,6 +7,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
 
+    // 无窗常驻时的 Dock 点击兜底:垃圾 URL/被拒调用可能让本次启动零窗口
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if !flag { SettingsWindow.shared.show() }
+        return true
+    }
+
     // 扩展经 rightclickkit://<action>?p=...&n=... 唤起(冷启动/热启动均送达)。
     // scheme 可被任意进程 open:nonce 由扩展签发、此处单次核销,缺失/过期一律丢弃;
     // 路径再过 PathPolicy,不替外部调用者搬运 FDA 敏感目录
@@ -26,7 +32,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 NSLog("[RCK] PathPolicy 拒绝: \(names)")
                 let alert = NSAlert()
                 alert.messageText = "已拒绝操作受保护的路径"
-                alert.informativeText = "以下路径属于系统隐私目录,RightClickKit 不处理:\n\(names)"
+                alert.informativeText = "以下路径属于受保护的系统目录(隐私/媒体库/时间机器),RightClickKit 不处理:\n\(names)"
                 alert.runModal()
                 continue
             }
